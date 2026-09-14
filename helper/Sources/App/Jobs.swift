@@ -1,0 +1,97 @@
+import Foundation
+
+actor Jobs {
+    let library: Library
+    private var worker: Task<Void,Never>?
+    private var downloadTask: Task<Void,Never>?
+    private var suspended = false
+    private var downloading = false
+    private var downloadError: String? = nil
+    init(_ library: Library) { self.library = library }
+    func pause() async {
+        suspended = true
+        worker?.cancel()
+        await worker?.value
+        worker = nil
+        downloadTask?.cancel()
+        await downloadTask?.value
+        downloadTask = nil
+        downloading = false
+    }
+    func resume() { suspended = false; start() }
+    func start() {
+        guard worker == nil, !suspended, !library.all().contains(where: { $0.status == "recording" || $0.status == "finalizing" }) else { return }
+        let library = self.library
+        worker = Task.detached { [weak self] in
+            while !Task.isCancelled {
+                guard let rec = library.all().reversed().first(where: { $0.status == "ready" && $0.jobStatus == "queued" }) else { break }
+                do { try await Self.process(rec,library:library) }
+                catch is CancellationError { _ = try? library.update(rec.id) { $0.jobStatus = "queued"; $0.error = "Processing interrupted; will resume after recording." }; break }
+                catch { _ = try? library.update(rec.id) { $0.jobStatus = "failed"; $0.error = error.localizedDescription } }
+            }
+            await self?.finished()
+        }
+    }
+    private func finished() { worker = nil; if !suspended && library.all().contains(where: { $0.status == "ready" && $0.jobStatus == "queued" }) { start() } }
+    func enqueue(id: String,stage: String) throws -> Recording {
+        guard ["all","transcribe","summary"].contains(stage) else { throw MeetMeError("Unknown processing stage") }
+        let rec = try library.get(id)
+        guard rec.status == "ready" else { throw MeetMeError("Finalize or recover this recording first") }
+        if rec.jobStatus == "running" || rec.jobStatus == "queued" { return rec }
+        let updated = try library.update(id) { $0.jobStatus = "queued"; $0.jobStage = stage; $0.error = nil }
+        start(); return updated
+    }
+    func download() throws -> [String:Any] {
+        guard !downloading else { return ["queued":true] }
+        guard !suspended, !library.all().contains(where: { $0.status == "recording" || $0.jobStatus == "running" }) else { throw MeetMeError("Wait until recording and processing finish before downloading a model") }
+        downloading = true; downloadError = nil
+        let model = library.model, root = library.modelRoot
+        downloadTask = Task.detached { [weak self] in
+            do { try await Transcribe.download(model:model,modelRoot:root); await self?.downloadFinished(nil) }
+            catch is CancellationError { await self?.downloadCancelled() }
+            catch { await self?.downloadFinished(error.localizedDescription) }
+        }
+        return ["queued":true]
+    }
+    private func downloadFinished(_ error: String?) { downloading = false; downloadError = error }
+    private func downloadCancelled() { downloading = false; downloadError = nil }
+    func state() -> [String:Any] {
+        var state: [String:Any] = ["processing":library.all().contains(where: { $0.jobStatus == "running" }),"modelReady":Transcribe.isReady(model:library.model,modelRoot:library.modelRoot),"summaryAvailable":Summarize.availability,"downloading":downloading]
+        if let error = downloadError { state["downloadError"] = error }
+        state["recordingId"] = library.all().first(where: { $0.status == "recording" })?.id ?? NSNull() as Any
+        return state
+    }
+    nonisolated static func process(_ rec: Recording,library: Library) async throws {
+        try Task.checkCancellation()
+        _ = try library.update(rec.id) { $0.jobStatus = "running"; $0.error = nil; $0.model = library.model }
+        let folder = try library.folder(rec.id), work = folder.appendingPathComponent("work")
+        try FileManager.default.createDirectory(at:work,withIntermediateDirectories:true)
+        var segments: [TranscriptSegment]
+        if rec.jobStage == "summary" {
+            segments = try JSONDecoder().decode([TranscriptSegment].self,from:Data(contentsOf:folder.appendingPathComponent("transcript.json")))
+        } else {
+            guard Transcribe.isReady(model:library.model,modelRoot:library.modelRoot) else { throw MeetMeError("Whisper model is not downloaded. Open Settings, download the model, then retry processing.") }
+            try MediaPrepare.audio(video:folder.appendingPathComponent("video.webm"),output:work.appendingPathComponent("audio.wav"))
+            try Task.checkCancellation()
+            segments = try await Transcribe.run(audio:work.appendingPathComponent("audio.wav"),model:library.model,modelRoot:library.modelRoot)
+            try Task.checkCancellation()
+            try durableWrite(JSONEncoder().encode(segments),to:folder.appendingPathComponent("transcript.json"))
+            try durableWrite(Data(segments.map(\.text).joined(separator:"\n").utf8),to:folder.appendingPathComponent("transcript.txt"))
+            let srt = segments.enumerated().map { "\($0.offset+1)\n\(timestamp($0.element.start)) --> \(timestamp($0.element.end))\n\($0.element.text)\n" }.joined(separator:"\n")
+            try durableWrite(Data(srt.utf8),to:folder.appendingPathComponent("transcript.srt"))
+            _ = try library.update(rec.id) { $0.hasTranscript = true; $0.jobStage = rec.jobStage == "all" ? "summary" : "transcribe" }
+        }
+        if rec.jobStage != "transcribe" {
+            try Task.checkCancellation()
+            let summary = try await Summarize.run(segments:segments,work:work)
+            try durableWrite(Data(summary.utf8),to:folder.appendingPathComponent("summary.md"))
+            _ = try library.update(rec.id) { $0.hasSummary = true }
+        }
+        _ = try library.update(rec.id) { $0.jobStatus = "completed"; $0.error = nil }
+        try? FileManager.default.removeItem(at:work.appendingPathComponent("audio.wav"))
+    }
+    nonisolated static func timestamp(_ seconds: Double) -> String {
+        let value = Int((max(0,seconds)*1000).rounded()), hours = value/3600000, minutes = (value/60000)%60, secs = (value/1000)%60, millis = value%1000
+        return String(format:"%02d:%02d:%02d,%03d",hours,minutes,secs,millis)
+    }
+}

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "MeetMe",
+  "version": "0.1.0",
+  "description": "Local meeting recorder with on-device processing.",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "tabCapture", "offscreen", "storage", "nativeMessaging", "tabs"],
+  "host_permissions": ["http://127.0.0.1:*/*", "https://meet.google.com/*", "https://teams.microsoft.com/*", "https://*.teams.microsoft.com/*", "https://app.zoom.us/*", "https://*.zoom.us/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_title": "MeetMe", "default_popup": "popup.html" },
+  "options_page": "options.html",
+  "web_accessible_resources": [{ "resources": ["content/hint.css"], "matches": ["https://meet.google.com/*", "https://teams.microsoft.com/*", "https://*.teams.microsoft.com/*", "https://app.zoom.us/*", "https://*.zoom.us/*"] }],
+  "content_scripts": [
+    { "matches": ["https://meet.google.com/*"], "js": ["content/common.js", "content/meet.js"], "css": ["content/hint.css"], "run_at": "document_idle" },
+    { "matches": ["https://teams.microsoft.com/*", "https://*.teams.microsoft.com/*"], "js": ["content/common.js", "content/teams.js"], "css": ["content/hint.css"], "run_at": "document_idle" },
+    { "matches": ["https://app.zoom.us/*", "https://*.zoom.us/*"], "js": ["content/common.js", "content/zoom.js"], "css": ["content/hint.css"], "run_at": "document_idle" }
+  ],
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://127.0.0.1:*; media-src 'self' http://127.0.0.1:*;" }
+}

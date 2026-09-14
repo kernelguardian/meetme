@@ -1,0 +1,71 @@
+# MeetMe implementation and validation
+
+Validated on 2026-09-14 with macOS 26.6, Swift 6.3.3, macOS SDK 26.5,
+Node.js 26.7 and FFmpeg 9.0.1. The implementation uses Argmax/WhisperKit 1.1.0.
+
+## Implemented
+
+- Brave MV3 extension with manual tab recording, an offscreen media document, independent
+  microphone selection/mute, restored remote audio, recording badges and in-tab indicators.
+- Bounded uploads with SHA-256, sequence numbers, duplicate-safe retries, final-blob draining
+  and failure cleanup. Native storage acknowledges durable chunks and retains interrupted data.
+- Swift native messaging host, authenticated loopback HTTP server, scoped playback URLs,
+  byte-range playback, FFmpeg finalization/audio extraction, and persistent sequential jobs.
+- Local Whisper transcription with incremental audio loading and cached model/tokenizer assets.
+- Apple Foundation Models summaries with context budgeting, recursive reduction, evidence
+  timestamp checks, checkpoints and actionable availability/service errors.
+- Settings and library UI with model download status, search, pagination, transcript seeking,
+  playback renewal, recovery, cleanup, re-transcription and re-summary controls.
+- Personal installer, native-host template, pinned dependencies and setup documentation.
+
+## Checks that passed
+
+| Check | Result |
+| --- | --- |
+| Debug Swift build | Passed |
+| Release Swift build | Passed |
+| Six JavaScript lifecycle/queue tests | Passed: sender boundary, failed-start cleanup, duplicate starts, stale completion, final-blob draining, out-of-order checksum completion |
+| Native media integration | Passed: synthetic WebM upload, authentication/checksum/order errors, retries, verified finalization, duration, byte ranges and restart recovery |
+| Native security integration | Passed: isolated home path canonicalization, work-directory symlink rejection and oversized native frames |
+| Real Brave integration in a temporary profile/home | Passed: extension loading, installed native-host connection, random-port CSP access, library listing and capture-state wiring |
+| Tiny Whisper inference | Passed: generated speech was transcribed through the local native pipeline; no microphone or meeting content used |
+| Installer | Shell validation, invalid-input checks and isolated installation passed |
+| Settings/library visual inspection | Screenshots inspected; default controls styled and overflow/focus states addressed |
+
+## Remaining acceptance gates and known limitations
+
+- **Live capture remains unverified.** The headless synthetic capture attempt correctly
+  failed Chromium's extension-invocation permission check; programmatically opening the
+  popup does not grant `activeTab`. Test by clicking the actual extension action on a meeting
+  tab. The automated browser smoke does not claim to test media capture and runs muted.
+- Verify local mic permission, independent mute behavior, both audio sides, tab/background
+  behavior and a one-hour recording in actual Meet, Teams and Zoom web calls.
+- **Apple summary generation is blocked on this Mac's local model service.** A standalone
+  probe reported `.available`, but even token counting and a trivial prompt failed with
+  nested `ModelManagerServices.ModelManagerError` code 1013 (and in one generation path,
+  `SensitiveContentAnalysisML` code 15). MeetMe surfaces an actionable message and retains
+  the transcript. Summary quality and long-transcript runtime acceptance remain pending.
+- Offline inference with network access forcibly disabled, representative accents/languages,
+  overlapping speech, peak memory and one-hour timestamp alignment still need acceptance tests.
+- `swift test` cannot run with this installed Command Line Tools environment because it lacks
+  XCTest. Seven Swift storage tests are included for a full Xcode toolchain; the standalone
+  executable tests above ran successfully here.
+- Platform hints and visible participant-label extraction are advisory and need validation
+  against current meeting UIs. Names may be absent when no supported DOM labels are visible.
+  Speaker identification is not implemented; transcripts do not assign speakers.
+- Personal installation is ad-hoc signed, not notarized or submitted to an extension store.
+  No permanent native-host registration or extension installation was made in the user's
+  normal browser profile during implementation.
+
+## Commands
+
+```sh
+swift build --package-path helper
+swift build --package-path helper --configuration release --product MeetMeHelper
+node --test tests/background_state.test.mjs tests/offscreen_capture.test.mjs
+python3 tests/smoke_helper.py
+python3 tests/native_security_smoke.py
+node tests/smoke_browser.mjs
+```
+
+For installation and first-run setup, see [README.md](README.md).

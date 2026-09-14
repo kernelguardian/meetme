@@ -1,0 +1,8 @@
+.DS_Store
+helper/.build/
+helper/.swiftpm/
+node_modules/
+.test-artifacts/
+*.log
+__pycache__/
+*.pyc

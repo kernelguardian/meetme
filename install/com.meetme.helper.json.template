@@ -1,0 +1,7 @@
+{
+  "name": "com.meetme.helper",
+  "description": "MeetMe local recording storage and on-device transcription",
+  "path": "/ABSOLUTE/PATH/TO/MeetMe/bin/meetme-launcher",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://REPLACE_WITH_EXTENSION_ID/"]
+}
