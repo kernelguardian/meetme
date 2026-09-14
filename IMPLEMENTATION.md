@@ -54,8 +54,8 @@ Node.js 26.7 and FFmpeg 9.0.1. The implementation uses Argmax/WhisperKit 1.1.0.
   against current meeting UIs. Names may be absent when no supported DOM labels are visible.
   Speaker identification is not implemented; transcripts do not assign speakers.
 - Personal installation is ad-hoc signed, not notarized or submitted to an extension store.
-  No permanent native-host registration or extension installation was made in the user's
-  normal browser profile during implementation.
+  The native helper was subsequently registered for the user's installed MeetMe extension
+  during first-run troubleshooting.
 
 ## Commands
 
@@ -69,3 +69,11 @@ node tests/smoke_browser.mjs
 ```
 
 For installation and first-run setup, see [README.md](README.md).
+
+## First-run folder picker fix
+
+The helper now runs a synchronous AppKit application event loop and opens NSOpenPanel
+asynchronously. A real folder selection returned successfully, a subsequent native request
+on the same process succeeded, and debug/release builds plus native media/security checks
+passed. The corrected release helper is installed. Settings allow up to ten minutes for
+folder selection and pause background status polling while the picker is open.

@@ -1,9 +1,10 @@
 const $ = s => document.querySelector(s);
 const keepAlive = chrome.runtime.connect({ name: 'meetme-ui' });
 let polling;
+let choosingFolder = false;
 
 async function native(command, params = {}) {
-  const reply = await chrome.runtime.sendMessage({ type: 'native-request', command, params });
+  const reply = await chrome.runtime.sendMessage({ type: 'native-request', command, params, ...(command === 'chooseFolder' ? { timeout: 600_000 } : {}) });
   if (!reply?.ok) throw new Error(reply?.error || 'The MeetMe helper did not respond.');
   return reply.result;
 }
@@ -18,6 +19,7 @@ async function loadDevices() {
   $('#device').replaceChildren(new Option('Default microphone', ''), ...devices.filter(d => d.kind === 'audioinput').map(d => new Option(d.label || `Microphone ${d.deviceId.slice(0, 6)}`, d.deviceId)));
 }
 async function refreshStatus() {
+  if (choosingFolder) return;
   try {
     const state = await native('status');
     $('#model-status').textContent = modelMessage(state);
@@ -36,8 +38,11 @@ async function run(button, operation, onError) {
 }
 
 $('#folder').onclick = () => run($('#folder'), async () => {
-  const result = await native('chooseFolder');
-  $('#library').textContent = result.libraryPath || 'No folder selected';
+  choosingFolder = true;
+  try {
+    const result = await native('chooseFolder');
+    $('#library').textContent = result.libraryPath || 'No folder selected';
+  } finally { choosingFolder = false; }
 }, error => { $('#library').textContent = `Folder selection failed: ${error.message}`; });
 $('#grant').onclick = () => run($('#grant'), async () => {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });

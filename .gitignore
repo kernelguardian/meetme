@@ -6,3 +6,6 @@ node_modules/
 *.log
 __pycache__/
 *.pyc
+
+# Local recording library selected during first-run setup.
+/temp/

@@ -157,7 +157,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   (async () => {
     await restored;
-    if (message.type === 'native-request') return native(message.command, message.params || {}, Math.min(Math.max(Number(message.timeout) || 30_000, 1_000), 90_000));
+    if (message.type === 'native-request') return native(message.command, message.params || {}, Math.min(Math.max(Number(message.timeout) || 30_000, 1_000), message.command === 'chooseFolder' ? 600_000 : 90_000));
     if (message.type === 'get-capture-state') {
       if (!extensionSender && state.recording?.tabId !== sender.tab?.id) return { phase: 'idle', recording: null, micEnabled: false, error: null };
       return state;

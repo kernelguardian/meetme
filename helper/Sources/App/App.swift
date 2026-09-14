@@ -21,11 +21,7 @@ actor Coordinator {
             if let model = request["model"] as? String { try library.setModel(model) }
             return ["model":library.model,"libraryPath":library.libraryPath ?? NSNull() as Any]
         case "chooseFolder":
-            let selection: URL? = await MainActor.run {
-                let panel = NSOpenPanel(); panel.title = "Choose your MeetMe recording library"; panel.message = "Choose a local folder for recordings, transcripts, and summaries."; panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true; panel.allowsMultipleSelection = false
-                NSApplication.shared.setActivationPolicy(.accessory); NSApplication.shared.activate(ignoringOtherApps:true)
-                return panel.runModal() == .OK ? panel.url : nil
-            }
+            let selection = await FolderPicker.choose()
             guard let selection else { throw MeetMeError("Folder selection cancelled") }
             try library.selectFolder(selection); return ["libraryPath":selection.path]
         case "list":
@@ -82,7 +78,18 @@ actor Coordinator {
 }
 
 @main struct MeetMeMain {
-    static func main() async {
+    // Native messaging still owns the process lifetime, but AppKit owns its main
+    // thread. An async command-line entry point does not establish the AppKit
+    // event loop required by NSOpenPanel and its window-server connections.
+    static func main() {
+        let application = NSApplication.shared
+        application.setActivationPolicy(.accessory)
+        let delegate = NativeApplicationDelegate()
+        application.delegate = delegate
+        withExtendedLifetime(delegate) { application.run() }
+    }
+
+    static func runHost() async {
         do {
             guard let origin = CommandLine.arguments.dropFirst().first, origin.hasPrefix("chrome-extension://"),
                   let url = URL(string:origin), let host = url.host, host.count == 32, host.allSatisfy({ ("a"..."p").contains(String($0)) }), url.path == "/" || url.path.isEmpty else { throw MeetMeError("Launch through the registered Brave native messaging host") }
@@ -104,5 +111,37 @@ actor Coordinator {
             server.stop()
             await coordinator.shutdown()
         } catch { NativeMessaging.log(error.localizedDescription) }
+    }
+}
+
+@MainActor
+private final class NativeApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Task.detached {
+            await MeetMeMain.runHost()
+            await MainActor.run { NSApplication.shared.terminate(nil) }
+        }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+}
+
+@MainActor
+private enum FolderPicker {
+    static func choose() async -> URL? {
+        await withCheckedContinuation { continuation in
+            let panel = NSOpenPanel()
+            panel.title = "Choose your MeetMe recording library"
+            panel.message = "Choose a local folder for recordings, transcripts, and summaries."
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.canCreateDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.begin { response in
+                continuation.resume(returning: response == .OK ? panel.url : nil)
+            }
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            panel.makeKeyAndOrderFront(nil)
+        }
     }
 }
