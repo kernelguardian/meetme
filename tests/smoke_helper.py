@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the real native/HTTP helper with synthetic media and an isolated library.
 
-No microphone, meeting content, personal configuration or model download is used.
+No microphone, meeting content, personal configuration or Apple speech-asset download is used.
 Usage: python3 tests/smoke_helper.py [helper/.build/debug/MeetMeHelper]
 """
 import hashlib
@@ -102,6 +102,15 @@ def main():
                 hello = host.request('hello')
                 base, token = hello['baseURL'], hello['token']
                 assert urllib.parse.urlparse(base).hostname == '127.0.0.1'
+                assert hello['model'] == 'en-US'
+                settings = host.request('settings')
+                assert settings['model'] == 'en-US'
+                assert any(language['id'] == 'en-US' for language in settings['languages'])
+                assert all('_' not in language['id'] for language in settings['languages'])
+                invalid_language = host.request('settings', expect_ok=False, model='not-a-supported-locale')
+                assert 'transcription' in invalid_language['error'].lower()
+                assert host.request('hello')['model'] == 'en-US'
+                completed.append('normalized supported locales and unsupported-language rejection without downloading speech assets')
                 recording = host.request('create', title='Synthetic smoke test', platform='test', micEnabled=False)
                 identifier = recording['id']
                 chunks = [media[i:i + 4096] for i in range(0, len(media), 4096)]

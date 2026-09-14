@@ -1,7 +1,8 @@
 # MeetMe implementation and validation
 
-Validated on 2026-09-14 with macOS 26.6, Swift 6.3.3, macOS SDK 26.5,
-Node.js 26.7 and FFmpeg 9.0.1. The implementation uses Argmax/WhisperKit 1.1.0.
+Validated on 2026-09-15 with macOS 26.6, Swift 6.3.3, macOS SDK 26.5,
+Node.js 26.7 and FFmpeg 9.0.1. Transcription uses Apple's SpeechAnalyzer APIs with a
+selected locale; the helper has no WhisperKit or Argmax dependency.
 
 ## Implemented
 
@@ -11,12 +12,14 @@ Node.js 26.7 and FFmpeg 9.0.1. The implementation uses Argmax/WhisperKit 1.1.0.
   and failure cleanup. Native storage acknowledges durable chunks and retains interrupted data.
 - Swift native messaging host, authenticated loopback HTTP server, scoped playback URLs,
   byte-range playback, FFmpeg finalization/audio extraction, and persistent sequential jobs.
-- Local Whisper transcription with incremental audio loading and cached model/tokenizer assets.
+- Local Apple SpeechAnalyzer transcription using system-managed, locale-specific speech assets.
+  Assets are requested automatically when processing begins; Settings can request them early.
 - Apple Foundation Models summaries with context budgeting, recursive reduction, evidence
   timestamp checks, checkpoints and actionable availability/service errors.
-- Settings and library UI with model download status, search, pagination, transcript seeking,
+- Settings and library UI with supported-language selection, optional asset-download status,
+  search, pagination, transcript seeking,
   playback renewal, recovery, cleanup, re-transcription and re-summary controls.
-- Personal installer, native-host template, pinned dependencies and setup documentation.
+- Personal installer, native-host template and setup documentation.
 
 ## Checks that passed
 
@@ -28,7 +31,7 @@ Node.js 26.7 and FFmpeg 9.0.1. The implementation uses Argmax/WhisperKit 1.1.0.
 | Native media integration | Passed: synthetic WebM upload, authentication/checksum/order errors, retries, verified finalization, duration, byte ranges and restart recovery |
 | Native security integration | Passed: isolated home path canonicalization, work-directory symlink rejection and oversized native frames |
 | Real Brave integration in a temporary profile/home | Passed: extension loading, installed native-host connection, random-port CSP access, library listing and capture-state wiring |
-| Tiny Whisper inference | Passed: generated speech was transcribed through the local native pipeline; no microphone or meeting content used |
+| Apple SpeechAnalyzer transcription and summary | Passed: a real user recording was transcribed with Apple SpeechAnalyzer and summarized by Apple Foundation Models; recording metadata identifies the language as `apple-speech:<locale>` |
 | Installer | Shell validation, invalid-input checks and isolated installation passed |
 | Settings/library visual inspection | Screenshots inspected; default controls styled and overflow/focus states addressed |
 
@@ -40,15 +43,13 @@ Node.js 26.7 and FFmpeg 9.0.1. The implementation uses Argmax/WhisperKit 1.1.0.
   tab. The automated browser smoke does not claim to test media capture and runs muted.
 - Verify local mic permission, independent mute behavior, both audio sides, tab/background
   behavior and a one-hour recording in actual Meet, Teams and Zoom web calls.
-- **Apple summary generation is blocked on this Mac's local model service.** A standalone
-  probe reported `.available`, but even token counting and a trivial prompt failed with
-  nested `ModelManagerServices.ModelManagerError` code 1013 (and in one generation path,
-  `SensitiveContentAnalysisML` code 15). MeetMe surfaces an actionable message and retains
-  the transcript. Summary quality and long-transcript runtime acceptance remain pending.
-- Offline inference with network access forcibly disabled, representative accents/languages,
+- Apple SpeechAnalyzer transcription and Apple Foundation Models summary generation have
+  completed successfully for a real recording. Broader quality, long-transcript runtime and
+  multilingual acceptance testing remain pending.
+- Processing after Apple speech assets are installed, representative accents/languages,
   overlapping speech, peak memory and one-hour timestamp alignment still need acceptance tests.
 - `swift test` cannot run with this installed Command Line Tools environment because it lacks
-  XCTest. Seven Swift storage tests are included for a full Xcode toolchain; the standalone
+  XCTest. The Swift storage/configuration tests are included for a full Xcode toolchain; the standalone
   executable tests above ran successfully here.
 - Platform hints and visible participant-label extraction are advisory and need validation
   against current meeting UIs. Names may be absent when no supported DOM labels are visible.

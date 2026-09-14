@@ -50,4 +50,17 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(Jobs.timestamp(-1),"00:00:00,000")
         XCTAssertEqual(Jobs.timestamp(59.9999),"00:01:00,000")
     }
+    func testLegacyWhisperConfigurationMigratesToEnglishUS() throws {
+        let config = temporary.appendingPathComponent("config")
+        try FileManager.default.createDirectory(at:config,withIntermediateDirectories:true)
+        try Data("{\"model\":\"openai_whisper-base\"}".utf8).write(to:config.appendingPathComponent("config.json"))
+        let migrated = try Library(configDirectory:config,initialLibrary:temporary.appendingPathComponent("library"))
+        XCTAssertEqual(migrated.model,"en-US")
+    }
+    func testLibraryStoresLocaleCandidatesAndRejectsMalformedValues() throws {
+        try library.setModel("fr-FR")
+        XCTAssertEqual(library.model,"fr-FR")
+        XCTAssertThrowsError(try library.setModel(""))
+        XCTAssertThrowsError(try library.setModel(String(repeating:"x",count:65)))
+    }
 }

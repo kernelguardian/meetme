@@ -164,7 +164,7 @@ async function pollStatus() {
   try {
     const status = await native('status');
     if (status.processing || status.downloading) {
-      notice(status.downloading ? 'Model download is in progress.' : 'Processing is in progress.');
+      notice(status.downloading ? 'Language asset download is in progress.' : 'Processing is in progress.');
       if (selected) await loadDetail(true);
     } else if (wasProcessing) {
       if (selected) await loadDetail(true);

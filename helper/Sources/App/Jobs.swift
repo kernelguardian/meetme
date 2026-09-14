@@ -55,25 +55,25 @@ actor Jobs {
     }
     private func downloadFinished(_ error: String?) { downloading = false; downloadError = error }
     private func downloadCancelled() { downloading = false; downloadError = nil }
-    func state() -> [String:Any] {
-        var state: [String:Any] = ["processing":library.all().contains(where: { $0.jobStatus == "running" }),"modelReady":Transcribe.isReady(model:library.model,modelRoot:library.modelRoot),"summaryAvailable":Summarize.availability,"downloading":downloading]
+    func state() async -> [String:Any] {
+        var state: [String:Any] = ["processing":library.all().contains(where: { $0.jobStatus == "running" }),"modelReady":await Transcribe.isReady(model:library.model,modelRoot:library.modelRoot),"summaryAvailable":Summarize.availability,"downloading":downloading]
         if let error = downloadError { state["downloadError"] = error }
         state["recordingId"] = library.all().first(where: { $0.status == "recording" })?.id ?? NSNull() as Any
         return state
     }
     nonisolated static func process(_ rec: Recording,library: Library) async throws {
         try Task.checkCancellation()
-        _ = try library.update(rec.id) { $0.jobStatus = "running"; $0.error = nil; $0.model = library.model }
+        let language = library.model
+        _ = try library.update(rec.id) { $0.jobStatus = "running"; $0.error = nil; $0.model = "apple-speech:" + language }
         let folder = try library.folder(rec.id), work = folder.appendingPathComponent("work")
         try FileManager.default.createDirectory(at:work,withIntermediateDirectories:true)
         var segments: [TranscriptSegment]
         if rec.jobStage == "summary" {
             segments = try JSONDecoder().decode([TranscriptSegment].self,from:Data(contentsOf:folder.appendingPathComponent("transcript.json")))
         } else {
-            guard Transcribe.isReady(model:library.model,modelRoot:library.modelRoot) else { throw MeetMeError("Whisper model is not downloaded. Open Settings, download the model, then retry processing.") }
             try MediaPrepare.audio(video:folder.appendingPathComponent("video.webm"),output:work.appendingPathComponent("audio.wav"))
             try Task.checkCancellation()
-            segments = try await Transcribe.run(audio:work.appendingPathComponent("audio.wav"),model:library.model,modelRoot:library.modelRoot)
+            segments = try await Transcribe.run(audio:work.appendingPathComponent("audio.wav"),model:language,modelRoot:library.modelRoot)
             try Task.checkCancellation()
             try durableWrite(JSONEncoder().encode(segments),to:folder.appendingPathComponent("transcript.json"))
             try durableWrite(Data(segments.map(\.text).joined(separator:"\n").utf8),to:folder.appendingPathComponent("transcript.txt"))

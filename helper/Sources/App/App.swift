@@ -18,8 +18,8 @@ actor Coordinator {
             return result
         case "status": return await jobs.state()
         case "settings":
-            if let model = request["model"] as? String { try library.setModel(model) }
-            return ["model":library.model,"libraryPath":library.libraryPath ?? NSNull() as Any]
+            if let model = request["model"] as? String { _ = try await Transcribe.locale(for: model); try library.setModel(model) }
+            return ["model":library.model,"languages":await Transcribe.languages(),"libraryPath":library.libraryPath ?? NSNull() as Any]
         case "chooseFolder":
             let selection = await FolderPicker.choose()
             guard let selection else { throw MeetMeError("Folder selection cancelled") }

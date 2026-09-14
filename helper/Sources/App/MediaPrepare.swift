@@ -44,7 +44,7 @@ enum MediaPrepare {
         return duration
     }
 
-    /// Extracts the meeting mix as 16 kHz mono PCM; WhisperKit is never given WebM/Opus directly.
+    /// Extracts the meeting mix as 16 kHz mono PCM; the speech analyzer receives decoded audio.
     static func audio(video: URL, output: URL) throws {
         guard FileManager.default.fileExists(atPath: video.path) else { throw MediaError.missingInput(video) }
         guard let ffmpeg = executable(named: "ffmpeg") else { throw MediaError.ffmpegUnavailable }

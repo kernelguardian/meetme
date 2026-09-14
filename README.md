@@ -12,9 +12,11 @@ in a folder you select. Meeting content is not sent to a transcription or summar
 - FFmpeg and FFprobe available locally (for example, a Homebrew FFmpeg installation).
 - Python 3 for the installer and helper smoke checks. Node.js 22 or newer is required
   for the JavaScript tests and browser integration check.
-- Apple Intelligence enabled and its on-device model available for summaries. Recording
-  and transcription remain usable when summaries are unavailable.
-- Network access for the first Whisper model download; subsequent processing uses the cache.
+- Apple Intelligence enabled and its on-device model available for summaries.
+- Apple Speech transcription available for the selected language. MeetMe lists the languages
+  supported by the current Mac; it automatically asks macOS to install required speech assets
+  when transcription starts. The optional Settings download action can install them earlier.
+  After installation, processing uses the system's on-device assets.
 
 ## Install for personal use
 
@@ -29,7 +31,8 @@ From this project directory:
    ```
 
 3. Reload the extension in Brave. Open MeetMe's **Settings**, choose your recording
-   folder, configure microphone access, and download a Whisper model.
+   folder, configure microphone access, and select a supported transcription language. You
+   may optionally download that language's Apple speech assets before your first recording.
 4. Open a meeting tab. Invoke MeetMe and click **Record**. Click **Stop** when finished;
    leave Brave running while local processing completes. Open **Library** for playback,
    transcript, summary and retry controls.
@@ -111,8 +114,9 @@ isolated development. Do not point tests at your personal recording library.
   model as available while its local service still fails (observed ModelManager error 1013
   on the development Mac). Finish pending Apple Intelligence downloads and follow the
   displayed retry guidance. Keep the transcript and retry when the model service is ready.
-- **Transcription unavailable:** download the selected model in Settings first. Check free
-  disk space and that FFmpeg/FFprobe are present at the paths configured by the installer.
+- **Transcription unavailable:** select a language listed in Settings and let macOS finish
+  installing its Apple speech assets. Check free disk space and that FFmpeg/FFprobe are
+  present at the paths configured by the installer.
 - **Interrupted recording:** use the library recovery action. Only committed chunks can be
   recovered; a damaged or truncated source may not be repairable.
 

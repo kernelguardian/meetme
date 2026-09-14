@@ -18,8 +18,8 @@ A personal tool to:
 1. Join **Google Meet / Microsoft Teams (web) / Zoom (web)** in Brave and click **Record**
    to capture the meeting tab's video and remote audio, plus an optional local microphone.
 2. **Later** (batch, not real-time) transcribe and summarise recordings **on-device**.
-   MeetMe does not upload meeting content for processing. Initial model downloads need
-   network access; processing must work offline once the required models are available.
+   MeetMe does not upload meeting content for processing. macOS may download required Apple
+   speech assets for the selected language; processing uses those on-device assets afterward.
 3. Save `video + transcript + summary` per meeting under **one folder chosen once**.
 4. Browse recordings through a **local extension UI** with playback, transcripts,
    summaries, search, and reprocessing controls.
@@ -30,7 +30,7 @@ A personal tool to:
 - **One-click start per meeting.** Join detection may remind the user to invoke the
   extension; it cannot independently grant tab-capture permission. Unattended auto-start
   is outside this design.
-- Use **WhisperKit** for local Whisper inference through Core ML and **Apple Foundation
+- Use **Apple SpeechAnalyzer** for local, locale-specific transcription and **Apple Foundation
   Models' on-device model** for summaries. Benchmark quality, processing time and peak
   memory on the target Mac; local execution does not inherently mean higher quality.
 - No manually managed daemon. Brave launches the helper through a persistent native
@@ -43,7 +43,8 @@ A personal tool to:
 
 **Native footprint:** a Swift helper is needed to access the selected macOS frameworks.
 It owns storage, job recovery, media preparation and ML. Include a local FFmpeg executable
-for WebM finalization and audio extraction, plus downloaded Whisper models. This is more
+for WebM finalization and audio extraction; Apple manages language assets outside the app's
+library. This is more
 than a minimal messaging bridge, but remains locally managed.
 
 ---
@@ -63,7 +64,7 @@ offscreen document                            authenticated, range-served video
   tab + optional mic → Web Audio
   MediaRecorder → bounded upload queue      Disk + post-recording jobs
 extension full-tab UI                         finalize/remux WebM → extract WAV
-  library, player, transcript, summary         WhisperKit → timestamped transcript
+  library, player, transcript, summary         SpeechAnalyzer → timestamped transcript
   search, re-run and recovery controls         Foundation Models → cited summary
 ```
 
@@ -147,12 +148,12 @@ extension full-tab UI                         finalize/remux WebM → extract WA
 ### 2.4 Native audio, transcription and summary pipeline
 
 1. **Prepare audio:** extract the finalized WebM's mixed audio using local FFmpeg into
-   mono 16 kHz WAV. Do not assume WebM/Opus can be passed directly to WhisperKit. Preserve
+   mono 16 kHz WAV. Do not assume WebM/Opus can be passed directly to SpeechAnalyzer. Preserve
    the recording timeline and verify timestamp alignment against the final video.
-2. **Transcribe:** use a pinned WhisperKit package version supporting incremental audio
-   loading, configured explicitly for bounded-memory loading. Start by benchmarking
-   base/small models; choose the default using representative meeting speech. Save
-   timestamped segments, SRT and plain text. Release transcription resources before summary.
+2. **Transcribe:** use `SpeechAnalyzer` and `SpeechTranscriber` with a locale selected from
+   the system-supported languages. Reserve and install Apple speech assets when processing
+   starts, with an optional manual download action in Settings. Save timestamped segments,
+   SRT and plain text. Release transcription resources before summary.
 3. **Summarise:** check `SystemLanguageModel.default.availability` and explicitly use the
    on-device model. If unavailable, retain the transcript and show a retryable summary
    status. Do not fall back to a cloud provider.
@@ -211,12 +212,12 @@ voices to names are separate future work; do not assign names based on the atten
 | `extension/popup.{html,js}` | Primary Record/Stop and MeetMe mic controls; capture independent of scraping. |
 | `extension/options.{html,js}` | Folder selection, visible microphone permission onboarding, device selection, join reminders and model settings. |
 | `extension/webui/` | Vanilla JS/CSS library, authenticated player, transcript seeking, summaries, search, re-run and recovery status. |
-| `helper/Package.swift` | SwiftPM; pinned WhisperKit dependency, macOS 26 FoundationModels framework, chosen HTTP-server dependency if required. |
+| `helper/Package.swift` | SwiftPM executable using macOS 26 system frameworks; no WhisperKit dependency. |
 | `helper/Sources/App/NativeMessaging.swift` | Length-prefixed JSON protocol, bounded responses, stdout discipline and EOF shutdown. |
 | `helper/Sources/App/HTTPServer.swift` | Loopback authentication, recording-scoped playback tokens, range responses and chunk endpoints. |
 | `helper/Sources/App/RecordingStore.swift` | Durable chunk acknowledgements, deduplication, finalization and incomplete-recording recovery. |
 | `helper/Sources/App/MediaPrepare.swift` | FFmpeg discovery/invocation, WebM remux/validation and mono 16 kHz WAV extraction. |
-| `helper/Sources/App/Transcribe.swift` | Incremental WhisperKit input and timestamped JSON/SRT/text output. |
+| `helper/Sources/App/Transcribe.swift` | Apple SpeechAnalyzer input, system-asset installation and timestamped JSON/SRT/text output. |
 | `helper/Sources/App/Summarize.swift` | On-device availability, context budgeting, recursive map-reduce and source timestamps. |
 | `helper/Sources/App/Jobs.swift` | Persistent sequential queue, interruption handling, checkpoints and retries. |
 | `helper/Sources/App/Library.swift` | Folder configuration, IDs, metadata, artifact writes and library queries. |
@@ -233,7 +234,7 @@ voices to names are separate future work; do not assign names based on the atten
    MeetMe mute behavior, then record a one-hour call and seek near the beginning, middle
    and end. Exercise upload failure, disk failure and helper disconnection. This gate
    precedes AI work and polished UI.
-2. **Audio preparation and transcription.** Extract WAV, run incremental WhisperKit,
+2. **Audio preparation and transcription.** Extract WAV, run Apple SpeechAnalyzer,
    produce timestamped outputs and add persistent processing jobs/backfill. Verify speech
    accuracy and timestamp alignment, record processing time and peak memory, and quit/
    reopen Brave during processing to verify recovery. Benchmark on representative accents,
@@ -265,8 +266,9 @@ voices to names are separate future work; do not assign names based on the atten
 - **Performance:** 16 GB is a reasonable target, not a guarantee. Limit recording quality,
   bound queues and audio loading, serialize processing, and measure memory with Brave open.
 - **Availability:** Apple Intelligence must be enabled and its on-device model ready.
-  Handle model downloads, unsupported settings/languages and temporary unavailability.
-  Whisper download size depends on the chosen model; do not assume one fixed small size.
+  Handle speech-asset downloads, unsupported settings/languages and temporary unavailability.
+  Apple speech-asset availability and download size depend on the selected language and
+  current macOS; do not assume a fixed size or that every locale is available.
 - **Reliability:** committed chunks can be retained, but browser crashes, sleep, disk-full
   events and missing final blobs can truncate recordings. Clearly surface incomplete data.
 - **Packaging:** personal local builds and distributed installs have different signing
@@ -309,8 +311,8 @@ voices to names are separate future work; do not assign names based on the atten
   the installer. Keep that ID stable across local development installations.
 - Launch onboarding: choose a local library folder, request mic access if wanted, select
   the device, explain independent MeetMe mute, and check Apple Intelligence availability.
-- Download the chosen Whisper model, verify cached offline loading, and run a short
-  recording → playback → transcription → summary smoke test.
+- Select a supported transcription language. Optionally download its Apple speech assets in
+  Settings, then run a short recording → playback → transcription → summary smoke test.
 
 ---
 
@@ -330,9 +332,8 @@ voices to names are separate future work; do not assign names based on the atten
 - [HTML media specification](https://html.spec.whatwg.org/multipage/media.html):
   media URL and credentials behavior; no custom bearer-header parameter on `<video>`.
 - [FFmpeg formats](https://ffmpeg.org/ffmpeg-formats.html): WebM/Matroska muxing and seek cues.
-- [WhisperKit / Argmax Swift](https://github.com/argmaxinc/argmax-oss-swift): supported
-  audio examples and `AudioInputOptions(audioLoadingMode: .incremental)`. Pin and validate
-  a package version that contains the selected APIs; the old WhisperKit repo redirects here.
+- [Apple Speech framework](https://developer.apple.com/documentation/speech):
+  `SpeechAnalyzer`, `SpeechTranscriber`, supported locales and system-managed speech assets.
 - [Apple context management](https://developer.apple.com/documentation/foundationmodels/managing-the-context-window)
   and [Foundation Models updates](https://developer.apple.com/documentation/updates/foundationmodels):
   availability, session budgets and newer token-count/context-size APIs. Check availability
