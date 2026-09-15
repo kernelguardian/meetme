@@ -47,12 +47,14 @@ actor Jobs {
         guard ["all","transcribe","summary"].contains(stage) else { throw MeetMeError("Unknown processing stage") }
         let rec = try library.get(id)
         guard rec.status == "ready" else { throw MeetMeError("Finalize or recover this recording first") }
-        if rec.jobStatus == "running" || rec.jobStatus == "queued" { return rec }
+        // Validate before the already-queued short circuit, so an unusable language is
+        // always reported rather than silently accepted.
         // Correcting a wrong auto-detection re-runs this recording in the chosen
         // language, leaving the global setting alone.
         if let language, !language.isEmpty {
             try await Transcribe.validate(engine:library.engine,language:language,variant:library.whisperVariant)
         }
+        if rec.jobStatus == "running" || rec.jobStatus == "queued" { return rec }
         let updated = try library.update(id) {
             $0.jobStatus = "queued"; $0.jobStage = stage; $0.error = nil
             if let language { $0.languageOverride = language.isEmpty ? nil : language }

@@ -187,6 +187,14 @@ def main():
                 assert recovered['status'] == 'ready', recovered
                 completed.append('stdin EOF exit, credential rotation and committed-media recovery after restart')
 
+                # Correcting a wrong auto-detection is per recording. An unusable language
+                # must be refused before any work is queued, whatever the global setting.
+                rejected = host.request('reprocess', expect_ok=False, recordingId=identifier,
+                                        stage='all', language='not-a-real-language')
+                assert 'language' in rejected['error'].lower(), rejected
+                assert host.request('detail', recordingId=identifier, offset=0, limit=1)['recording'].get('jobStatus') != 'queued'
+                completed.append('per-recording language correction validates before queueing work')
+
                 # A selected folder can already hold recordings from an older build, which
                 # is exactly what happens when MeetMe is pointed back at a previous library.
                 # meta.json gains fields over time, so decoding must tolerate older shapes

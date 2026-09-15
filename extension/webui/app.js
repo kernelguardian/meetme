@@ -263,6 +263,41 @@ function renderSummary(markdown, recording = {}) {
     seen = true;
   }
 }
+// Auto-detection can land on the wrong language. Offer the engine's list so one
+// recording can be re-run correctly without disturbing the global setting.
+async function populateDetailLanguage(recording) {
+  const menu = $('#detail-language');
+  const hint = $('#language-hint');
+  let engine;
+  try {
+    const settings = await native('settings');
+    engine = (settings.engines || []).find(item => item.id === settings.engine);
+  } catch {
+    menu.replaceChildren(new Option('Unavailable', ''));
+    menu.disabled = true;
+    $('#retranscribe').disabled = true;
+    hint.textContent = '';
+    return;
+  }
+  const languages = engine?.languages || [];
+  const options = [
+    ...(engine?.supportsAutoDetect ? [new Option('Detect automatically', 'auto')] : []),
+    ...languages.map(language => new Option(language.name, language.id)),
+  ];
+  menu.replaceChildren(...options);
+  const current = recording.languageOverride || recording.language || '';
+  const ids = options.map(option => option.value);
+  menu.value = ids.includes(current) ? current : (ids[0] || '');
+
+  const busy = ['queued', 'running'].includes(recording.jobStatus);
+  menu.disabled = !options.length || busy;
+  $('#retranscribe').disabled = !options.length || busy || recording.status !== 'ready';
+  hint.textContent = recording.languageOverride
+    ? `Set by you. Re-transcribing replaces the transcript and summary.`
+    : recording.language
+      ? `Detected as ${languageName(recording.language)}. If that is wrong, pick the right one and re-transcribe.`
+      : 'Pick the spoken language and re-transcribe if the transcript looks wrong.';
+}
 function setActionAvailability(recording) {
   const ready = recording?.status === 'ready';
   const busy = ['queued', 'running'].includes(recording?.jobStatus);
@@ -305,6 +340,7 @@ async function loadDetail(reset = false) {
   segmentOffset += (detail.segments || []).length;
   $('#more').hidden = segmentOffset >= Number(detail.totalSegments || 0);
   setActionAvailability(recording);
+  await populateDetailLanguage(recording);
 }
 async function openRecording(id) {
   selected = id;
@@ -406,6 +442,8 @@ $('#back').onclick = () => {
   list(true);
 };
 $('#more').onclick = () => loadDetail().catch(error => notice(error.message));
+// A wrong language invalidates the summary too, so this always re-runs both stages.
+$('#retranscribe').onclick = () => action('reprocess', { stage: 'all', language: $('#detail-language').value });
 $('#retry-all').onclick = () => action('reprocess', { stage: 'all' });
 $('#retry-transcript').onclick = () => action('reprocess', { stage: 'transcribe' });
 $('#retry-summary').onclick = () => action('reprocess', { stage: 'summary' });
