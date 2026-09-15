@@ -187,6 +187,13 @@ def main():
                 assert recovered['status'] == 'ready', recovered
                 completed.append('stdin EOF exit, credential rotation and committed-media recovery after restart')
 
+                # Recovery queues processing, so stop that to reach a known idle state.
+                # A second stop then has nothing to do, which is what makes the checks
+                # below meaningful rather than coincidental.
+                host.request('stopProcessing', recordingId=identifier)
+                idle = host.request('stopProcessing', recordingId=identifier)
+                assert idle['stopped'] is False, idle
+
                 # Correcting a wrong auto-detection is per recording. An unusable language
                 # must be refused before any work is queued, whatever the global setting.
                 rejected = host.request('reprocess', expect_ok=False, recordingId=identifier,
@@ -194,6 +201,20 @@ def main():
                 assert 'language' in rejected['error'].lower(), rejected
                 assert host.request('detail', recordingId=identifier, offset=0, limit=1)['recording'].get('jobStatus') != 'queued'
                 completed.append('per-recording language correction validates before queueing work')
+
+                # Stopping must never damage a recording: the media stays ready and the
+                # job can always be queued again afterwards.
+                assert host.request('reprocess', recordingId=identifier, stage='transcribe')['jobStatus'] == 'queued'
+                stopped = host.request('stopProcessing', recordingId=identifier)
+                if stopped['stopped']:
+                    assert stopped['jobStatus'] == 'stopped', stopped
+                after = host.request('detail', recordingId=identifier, offset=0, limit=1)['recording']
+                assert after['status'] == 'ready', after
+                assert after['jobStatus'] != 'running', after
+                # Stopping must never leave a recording stuck: it can always be queued again.
+                assert host.request('reprocess', recordingId=identifier, stage='transcribe')['jobStatus'] == 'queued'
+                host.request('stopProcessing', recordingId=identifier)
+                completed.append('processing can be stopped and re-queued without damaging the recording')
 
                 # A selected folder can already hold recordings from an older build, which
                 # is exactly what happens when MeetMe is pointed back at a previous library.
