@@ -26,11 +26,19 @@ function stamp(seconds) {
   const secs = String(Math.floor(seconds % 60)).padStart(2, '0');
   return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${secs}` : `${minutes}:${secs}`;
 }
+const displayNames = (() => {
+  try { return new Intl.DisplayNames(undefined, { type: 'language' }); } catch { return null; }
+})();
+function languageName(code) {
+  if (!code) return '';
+  try { return displayNames?.of(code) || code; } catch { return code; }
+}
 function metaParts(recording) {
   const parts = [];
   if (recording.platform) parts.push(recording.platform);
   if (recording.createdAt) parts.push(new Date(recording.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }));
   if (Number(recording.duration) > 0) parts.push(stamp(recording.duration));
+  if (recording.language) parts.push(languageName(recording.language));
   return parts;
 }
 // jobStage names the work still outstanding, and advances as the job runs.
@@ -200,10 +208,20 @@ function inline(parent, text) {
   }
   if (last < text.length) parent.append(text.slice(last));
 }
-function renderSummary(markdown) {
+function renderSummary(markdown, recording = {}) {
   const box = $('#summary');
   box.replaceChildren();
-  if (!markdown?.trim()) { box.textContent = 'No summary yet.'; return; }
+  if (!markdown?.trim()) {
+    // A skipped summary is an expected outcome, not a failure, so say why.
+    box.textContent = recording.summarySkipped || 'No summary yet.';
+    return;
+  }
+  if (recording.hasTranslation) {
+    const note = document.createElement('p');
+    note.className = 'summary-note';
+    note.textContent = `Apple Intelligence cannot read ${languageName(recording.language) || 'this language'}, so this summary was written from an English translation of the recording.`;
+    box.append(note);
+  }
   let bullets;
   let seen = false;
   for (const raw of markdown.split(/\r?\n/)) {
@@ -269,7 +287,7 @@ async function loadDetail(reset = false) {
     people.textContent = `Visible participant labels at start: ${recording.participants.join(', ')}. These do not identify transcript speakers.`;
     $('#recording').append(people);
   }
-  renderSummary(detail.summary);
+  renderSummary(detail.summary, recording);
   appendSegments(detail.segments);
   segmentOffset += (detail.segments || []).length;
   $('#more').hidden = segmentOffset >= Number(detail.totalSegments || 0);

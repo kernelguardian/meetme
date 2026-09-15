@@ -1,8 +1,9 @@
 # MeetMe implementation and validation
 
 Validated on 2026-09-15 with macOS 26.6, Swift 6.3.3, macOS SDK 26.5,
-Node.js 26.7 and FFmpeg 9.0.1. Transcription uses Apple's SpeechAnalyzer APIs with a
-selected locale; the helper has no WhisperKit or Argmax dependency.
+Node.js 26.7 and FFmpeg 9.0.1. Transcription offers two user-selectable on-device engines:
+Apple's SpeechAnalyzer (30 locales, no download) and WhisperKit via argmax-oss-swift 1.1.0
+(~100 languages, one-time model download, automatic language detection).
 
 ## Implemented
 
@@ -14,10 +15,14 @@ selected locale; the helper has no WhisperKit or Argmax dependency.
   byte-range playback, FFmpeg finalization/audio extraction, and persistent sequential jobs.
 - Local Apple SpeechAnalyzer transcription using system-managed, locale-specific speech assets.
   Assets are requested automatically when processing begins; Settings can request them early.
+- Local WhisperKit transcription for languages Apple ships no assets for, with per-variant
+  model download, an offline tokenizer ready-marker, and automatic language detection.
 - Apple Foundation Models summaries with context budgeting, recursive reduction, evidence
-  timestamp checks, checkpoints and actionable availability/service errors.
-- Settings and library UI with supported-language selection, optional asset-download status,
-  search, pagination, transcript seeking,
+  timestamp checks, checkpoints and actionable availability/service errors. Transcripts in
+  languages Foundation Models cannot read are summarised from a Whisper English translation
+  of the same audio; on the Apple engine the summary is skipped with a recorded reason.
+- Settings and library UI with engine/language/model selection, download status, search,
+  pagination, transcript seeking, rendered summaries with seekable citations,
   playback renewal, recovery, cleanup, re-transcription and re-summary controls.
 - Personal installer, native-host template and setup documentation.
 
@@ -31,7 +36,9 @@ selected locale; the helper has no WhisperKit or Argmax dependency.
 | Native media integration | Passed: synthetic WebM upload, authentication/checksum/order errors, retries, verified finalization, duration, byte ranges and restart recovery |
 | Native security integration | Passed: isolated home path canonicalization, work-directory symlink rejection and oversized native frames |
 | Real Brave integration in a temporary profile/home | Passed: extension loading, installed native-host connection, random-port CSP access, library listing and capture-state wiring |
-| Apple SpeechAnalyzer transcription and summary | Passed: a real user recording was transcribed with Apple SpeechAnalyzer and summarized by Apple Foundation Models; recording metadata identifies the language as `apple-speech:<locale>` |
+| Apple SpeechAnalyzer transcription and summary | Passed: a real user recording was transcribed with Apple SpeechAnalyzer and summarized by Apple Foundation Models |
+| Engine catalogue and validation | Passed: `settings` advertises both engines, Whisper exposes Hindi/Malayalam and ~100 deduplicated language codes, and Apple rejects unsupported languages and auto-detect before any download |
+| Whisper transcription, detection and translation | **Not run.** The code builds and the model-readiness path reports correctly, but no Whisper model has been downloaded on this Mac, so inference, auto-detection and the translate-then-summarise path are unverified |
 | Installer | Shell validation, invalid-input checks and isolated installation passed |
 | Settings/library visual inspection | Screenshots inspected; default controls styled and overflow/focus states addressed |
 
@@ -46,6 +53,12 @@ selected locale; the helper has no WhisperKit or Argmax dependency.
 - Apple SpeechAnalyzer transcription and Apple Foundation Models summary generation have
   completed successfully for a real recording. Broader quality, long-transcript runtime and
   multilingual acceptance testing remain pending.
+- **The Whisper engine has never transcribed audio here.** Download a model in Settings, then
+  verify: a Hindi or Malayalam recording transcribes in the native script; auto-detect picks
+  the right language; and the translate-then-summarise path writes `transcript.en.txt` plus a
+  summary whose `[HH:MM:SS]` citations still line up with the recording.
+- Measured Whisper model sizes are not yet confirmed; the figures shown in Settings are the
+  published approximations for each variant.
 - Processing after Apple speech assets are installed, representative accents/languages,
   overlapping speech, peak memory and one-hour timestamp alignment still need acceptance tests.
 - `swift test` cannot run with this installed Command Line Tools environment because it lacks

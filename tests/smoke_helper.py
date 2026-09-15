@@ -105,12 +105,29 @@ def main():
                 assert hello['model'] == 'en-US'
                 settings = host.request('settings')
                 assert settings['model'] == 'en-US'
-                assert any(language['id'] == 'en-US' for language in settings['languages'])
-                assert all('_' not in language['id'] for language in settings['languages'])
+                assert settings['engine'] == 'apple'
+                engines = {engine['id']: engine for engine in settings['engines']}
+                assert set(engines) == {'apple', 'whisper'}
+                apple = engines['apple']['languages']
+                assert any(language['id'] == 'en-US' for language in apple)
+                assert all('_' not in language['id'] for language in apple)
+                assert engines['apple']['supportsAutoDetect'] is False
+                # Whisper exists to reach the languages Apple ships no assets for.
+                whisper = {language['id'] for language in engines['whisper']['languages']}
+                assert {'hi', 'ml'} <= whisper
+                assert engines['whisper']['supportsAutoDetect'] is True
+                assert any(variant['id'].startswith('openai_whisper-') for variant in settings['whisperVariants'])
                 invalid_language = host.request('settings', expect_ok=False, model='not-a-supported-locale')
                 assert 'transcription' in invalid_language['error'].lower()
+                # Apple cannot do Malayalam or auto-detect; both must be refused up front.
+                assert not host.request('settings', expect_ok=False, engine='apple', model='ml')['ok']
+                assert not host.request('settings', expect_ok=False, engine='apple', model='auto')['ok']
                 assert host.request('hello')['model'] == 'en-US'
-                completed.append('normalized supported locales and unsupported-language rejection without downloading speech assets')
+                whisper_saved = host.request('settings', engine='whisper', model='auto')
+                assert whisper_saved['engine'] == 'whisper' and whisper_saved['model'] == 'auto'
+                restored = host.request('settings', engine='apple', model='en-US')
+                assert restored['engine'] == 'apple' and restored['model'] == 'en-US'
+                completed.append('engine catalogue exposes Whisper languages Apple lacks, and rejects unsupported engine/language pairs without downloading models')
                 recording = host.request('create', title='Synthetic smoke test', platform='test', micEnabled=False)
                 identifier = recording['id']
                 chunks = [media[i:i + 4096] for i in range(0, len(media), 4096)]

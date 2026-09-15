@@ -40,13 +40,27 @@
 
     <section class="card">
       <div class="card-head"><h2>Transcription</h2></div>
-      <p class="small">Choose the language spoken in the meeting. MeetMe transcribes it on this Mac using Apple’s on-device speech models, and downloads missing language assets automatically when processing starts.</p>
+      <p class="small">Everything is transcribed on this Mac. Apple’s engine is instant but covers only its built-in languages; Whisper covers about 100 including Hindi and Malayalam, and can work out the language on its own.</p>
+
+      <div class="field-row">
+        <label class="field-label" for="engine">Engine</label>
+        <select id="engine" class="grow"></select>
+      </div>
+      <p id="engine-detail" class="small engine-detail"></p>
+
+      <div class="field-row">
+        <label class="field-label" for="language">Language</label>
+        <select id="language" class="grow" disabled><option>Loading languages…</option></select>
+      </div>
+
+      <div class="field-row" id="variant-row" hidden>
+        <label class="field-label" for="whisper-variant">Model</label>
+        <select id="whisper-variant" class="grow"></select>
+      </div>
+
       <div class="card-controls">
-        <select id="language" class="grow" disabled>
-          <option>Loading languages…</option>
-        </select>
-        <button id="save-language" class="btn" disabled>Save</button>
-        <button id="download-language" class="btn" disabled>Download assets</button>
+        <button id="save-language" class="btn btn-primary" disabled>Save</button>
+        <button id="download-language" class="btn" disabled>Download</button>
       </div>
       <p id="language-status" class="stat-row" role="status"></p>
       <p id="summary-status" class="stat-row"></p>

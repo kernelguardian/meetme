@@ -7,11 +7,16 @@ let package = Package(
     products: [
         .executable(name: "MeetMeHelper", targets: ["App"])
     ],
-    dependencies: [],
+    dependencies: [
+        // 1.1.0 provides bounded-memory incremental file loading for long recordings.
+        .package(url: "https://github.com/argmaxinc/argmax-oss-swift", exact: "1.1.0")
+    ],
     targets: [
         .executableTarget(
             name: "App",
-            dependencies: [],
+            dependencies: [
+                .product(name: "WhisperKit", package: "argmax-oss-swift")
+            ],
             path: "Sources/App"
         ),
         .testTarget(

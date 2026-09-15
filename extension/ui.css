@@ -186,6 +186,30 @@ a:hover { color: var(--accent-hover); text-decoration: underline; }
 .card-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
 .card-controls select { max-width: 420px; }
 
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.field-label {
+  flex: none;
+  width: 72px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.field-row select { max-width: 420px; }
+
+.engine-detail { margin: 8px 0 0 84px; }
+
+@media (max-width: 560px) {
+  .field-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .field-label { width: auto; }
+  .engine-detail { margin-left: 0; }
+}
+
 /* ---------- status pills and dots ---------- */
 
 .pill {
@@ -590,6 +614,17 @@ input::placeholder { color: var(--dim); }
 .summary ul { margin: 0 0 10px; padding-left: 18px; }
 .summary li { margin: 0 0 6px; overflow-wrap: anywhere; }
 .summary strong { font-weight: 600; }
+
+.summary-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  margin: 0 0 12px;
+  background: var(--surface-2);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
 
 .cite {
   font: 500 11px var(--mono);

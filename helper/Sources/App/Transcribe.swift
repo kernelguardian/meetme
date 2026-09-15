@@ -1,6 +1,4 @@
 import Foundation
-import Speech
-import AVFoundation
 
 struct TranscriptSegment: Codable, Sendable {
     var start: Double
@@ -8,76 +6,88 @@ struct TranscriptSegment: Codable, Sendable {
     var text: String
 }
 
+/// Fronts the two transcription engines. Apple's is the default because it needs no
+/// download; Whisper covers the languages Apple has no assets for and can auto-detect.
 enum Transcribe {
-    static func languages() async -> [[String:String]] {
-        await SpeechTranscriber.supportedLocales.map {
-            ["id": $0.identifier.replacingOccurrences(of: "_", with: "-"), "name": Locale.current.localizedString(forIdentifier: $0.identifier) ?? $0.identifier]
-        }.sorted { $0["name"]! < $1["name"]! }
+    static let autoDetect = "auto"
+
+    enum Engine: String, Sendable {
+        case apple
+        case whisper
+
+        static func parse(_ value: String) -> Engine { Engine(rawValue: value) ?? .apple }
     }
 
-    static func locale(for model: String) async throws -> Locale {
-        guard SpeechTranscriber.isAvailable,
-              let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: model)) else {
-            throw MeetMeError("Apple native transcription is unavailable for this language or device. Choose a supported language in Settings.")
-        }
-        return locale
+    struct Outcome: Sendable {
+        var segments: [TranscriptSegment]
+        /// The language actually used, which for auto-detect is what Whisper heard.
+        var language: String
     }
 
-    static func download(model: String, modelRoot: URL) async throws {
-        let locale = try await locale(for: model)
-        try Task.checkCancellation()
-        try await AssetInventory.reserve(locale: locale)
-        let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
-        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-            try await request.downloadAndInstall()
-        }
-        try Task.checkCancellation()
+    static func engines() async -> [[String: Any]] {
+        [
+            ["id": Engine.apple.rawValue,
+             "name": "Apple (on-device)",
+             "detail": "Fast, no download. Limited to Apple's built-in languages.",
+             "supportsAutoDetect": false,
+             "languages": await AppleTranscribe.languages()],
+            ["id": Engine.whisper.rawValue,
+             "name": "Whisper (on-device)",
+             "detail": "Covers ~99 languages including Hindi and Malayalam. Needs a one-time model download.",
+             "supportsAutoDetect": true,
+             "languages": WhisperTranscribe.languages()],
+        ]
     }
 
-    static func isReady(model: String, modelRoot: URL) async -> Bool {
-        guard let locale = try? await locale(for: model) else { return false }
-        return await AssetInventory.status(forModules: [SpeechTranscriber(locale: locale, preset: .transcription)]) == .installed
-    }
-
-    static func run(audio: URL, model: String, modelRoot: URL) async throws -> [TranscriptSegment] {
-        try await download(model: model, modelRoot: modelRoot)
-        let locale = try await locale(for: model)
-        let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
-        let analyzer = SpeechAnalyzer(modules: [transcriber])
-        let collector = Task<[TranscriptSegment], Error> {
-            var segments: [TranscriptSegment] = []
-            for try await result in transcriber.results {
-                try Task.checkCancellation()
-                let text = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
-                let start = result.range.start.seconds
-                let end = CMTimeRangeGetEnd(result.range).seconds
-                if !text.isEmpty, start.isFinite, end.isFinite, end >= start {
-                    segments.append(TranscriptSegment(start: max(0, start), end: end, text: text))
-                }
+    static func validate(engine: Engine, language: String, variant: String) async throws {
+        switch engine {
+        case .apple:
+            guard language != autoDetect else {
+                throw MeetMeError("Apple's engine cannot detect the language automatically. Choose a language, or switch to Whisper.")
             }
-            return segments
-        }
-        return try await withTaskCancellationHandler {
-            do {
-                let file = try AVAudioFile(forReading: audio)
-                if let end = try await analyzer.analyzeSequence(from: file) {
-                    try await analyzer.finalizeAndFinish(through: end)
-                } else {
-                    try await analyzer.finalizeAndFinishThroughEndOfInput()
-                }
-                let segments = try await collector.value
-                try Task.checkCancellation()
-                guard !segments.isEmpty else { throw MeetMeError("Apple transcription found no speech in this recording.") }
-                return segments
-            } catch {
-                await analyzer.cancelAndFinishNow()
-                collector.cancel()
-                _ = try? await collector.value
-                throw error
+            _ = try await AppleTranscribe.locale(for: language)
+        case .whisper:
+            guard WhisperTranscribe.isKnownVariant(variant) else { throw MeetMeError("Unknown Whisper model \(variant)") }
+            guard WhisperTranscribe.isSupportedLanguage(language) else {
+                throw MeetMeError("Whisper does not support the language \(language)")
             }
-        } onCancel: {
-            collector.cancel()
-            Task { await analyzer.cancelAndFinishNow() }
+        }
+    }
+
+    static func run(audio: URL, engine: Engine, language: String, variant: String, modelRoot: URL) async throws -> Outcome {
+        switch engine {
+        case .apple:
+            let segments = try await AppleTranscribe.run(audio: audio, model: language)
+            return Outcome(segments: segments, language: language)
+        case .whisper:
+            let outcome = try await WhisperTranscribe.run(audio: audio, variant: variant, language: language, translate: false, modelRoot: modelRoot)
+            return Outcome(segments: outcome.segments, language: outcome.language)
+        }
+    }
+
+    /// English rendering of the same audio, used when the spoken language is one
+    /// Apple Intelligence cannot summarise. Only Whisper can do this.
+    static func translateToEnglish(audio: URL, engine: Engine, language: String, variant: String, modelRoot: URL) async throws -> [TranscriptSegment] {
+        guard engine == .whisper else {
+            throw MeetMeError("Translation requires the Whisper engine.")
+        }
+        return try await WhisperTranscribe.run(audio: audio, variant: variant, language: language, translate: true, modelRoot: modelRoot).segments
+    }
+
+    static func download(engine: Engine, language: String, variant: String, modelRoot: URL) async throws {
+        switch engine {
+        case .apple: try await AppleTranscribe.download(model: language)
+        case .whisper: try await WhisperTranscribe.download(variant: variant, modelRoot: modelRoot)
+        }
+    }
+
+    static func isReady(engine: Engine, language: String, variant: String, modelRoot: URL) async -> Bool {
+        switch engine {
+        case .apple:
+            guard language != autoDetect else { return false }
+            return await AppleTranscribe.isReady(model: language)
+        case .whisper:
+            return WhisperTranscribe.isReady(variant: variant, modelRoot: modelRoot)
         }
     }
 }

@@ -24,6 +24,15 @@ enum Summarize {
         }
     }
 
+    /// Foundation Models covers far fewer languages than Whisper transcribes. A
+    /// transcript outside this set has to be translated to English before summarising.
+    static func supportsLanguage(_ language: String) -> Bool {
+        guard #available(macOS 26.0, *) else { return false }
+        let code = Locale(identifier: language.replacingOccurrences(of: "_", with: "-")).language.languageCode?.identifier
+        guard let code else { return false }
+        return SystemLanguageModel.default.supportedLanguages.contains { $0.languageCode?.identifier == code }
+    }
+
     static func run(segments: [TranscriptSegment], work: URL) async throws -> String {
         try Task.checkCancellation()
         guard !segments.isEmpty else { return "# Meeting summary\n\nNo transcribed speech was available." }

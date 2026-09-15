@@ -13,10 +13,29 @@ in a folder you select. Meeting content is not sent to a transcription or summar
 - Python 3 for the installer and helper smoke checks. Node.js 22 or newer is required
   for the JavaScript tests and browser integration check.
 - Apple Intelligence enabled and its on-device model available for summaries.
-- Apple Speech transcription available for the selected language. MeetMe lists the languages
-  supported by the current Mac; it automatically asks macOS to install required speech assets
-  when transcription starts. The optional Settings download action can install them earlier.
-  After installation, processing uses the system's on-device assets.
+- For the Apple transcription engine, Apple Speech assets for the selected language. MeetMe
+  lists the languages the current Mac supports and asks macOS to install the assets when
+  transcription starts; the Settings download action can install them earlier.
+- For the Whisper engine, roughly 150 MB to 1.6 GB of disk for the chosen model. Whisper
+  will not process a recording until its model has been downloaded in Settings.
+
+## Choosing a transcription engine
+
+Both engines run entirely on this Mac. Settings lets you pick per language.
+
+| | Apple | Whisper |
+|---|---|---|
+| Languages | 30 locales | ~100, including Hindi, Malayalam, Tamil, Telugu, Bengali |
+| Setup | No download | One-time model download |
+| Speed | Faster | Slower |
+| Auto-detect language | No | Yes |
+
+Apple's `SpeechTranscriber` ships no assets for any Indic language other than English (India),
+so Hindi, Malayalam and their neighbours require Whisper. Apple Intelligence summarises only
+23 languages; when a transcript falls outside that set, MeetMe uses Whisper to produce an
+English translation of the same audio and summarises that, keeping the `[HH:MM:SS]` citations
+aligned with the recording. On the Apple engine the summary is skipped instead, and the
+recording says why.
 
 ## Install for personal use
 
@@ -30,9 +49,10 @@ From this project directory:
    ./install/install.sh --extension-id YOUR_32_CHARACTER_EXTENSION_ID
    ```
 
-3. Reload the extension in Brave. Open MeetMe's **Settings**, choose your recording
-   folder, configure microphone access, and select a supported transcription language. You
-   may optionally download that language's Apple speech assets before your first recording.
+3. Reload the extension in Brave. Open MeetMe's **Settings**, choose your recording folder,
+   configure microphone access, then pick a transcription engine and language. On the Apple
+   engine you may optionally pre-install that language's speech assets; on Whisper you must
+   download the model before the first recording is processed.
 4. Open a meeting tab. Invoke MeetMe and click **Record**. Click **Stop** when finished;
    leave Brave running while local processing completes. Open **Library** for playback,
    transcript, summary and retry controls.
@@ -123,9 +143,13 @@ It needs Pillow and writes both the idle and recording variants.
   model as available while its local service still fails (observed ModelManager error 1013
   on the development Mac). Finish pending Apple Intelligence downloads and follow the
   displayed retry guidance. Keep the transcript and retry when the model service is ready.
-- **Transcription unavailable:** select a language listed in Settings and let macOS finish
-  installing its Apple speech assets. Check free disk space and that FFmpeg/FFprobe are
-  present at the paths configured by the installer.
+- **Transcription unavailable:** on the Apple engine, select a language listed in Settings
+  and let macOS finish installing its speech assets; on Whisper, download the model in
+  Settings first, since processing will not start without it. Check free disk space and that
+  FFmpeg/FFprobe are present at the paths configured by the installer.
+- **Your language is missing:** Apple's engine only lists what macOS ships assets for, which
+  excludes every Indic language except English (India). Switch the engine to Whisper, which
+  covers about 100 languages and can also detect the language automatically.
 - **Interrupted recording:** use the library recovery action. Only committed chunks can be
   recovered; a damaged or truncated source may not be repairable.
 

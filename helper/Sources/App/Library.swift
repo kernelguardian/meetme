@@ -32,10 +32,20 @@ struct Recording: Codable {
     var totalBytes: Int = 0
     var chunks: [String: ChunkReceipt] = [:]
     var model: String? = nil
+    /// The language actually transcribed, which for auto-detect is what Whisper heard.
+    var language: String? = nil
     var hasTranscript: Bool = false
     var hasSummary: Bool = false
+    var hasTranslation: Bool = false
+    /// Why a ready transcript has no summary, when that is expected rather than a failure.
+    var summarySkipped: String? = nil
 }
-struct Configuration: Codable { var libraryPath: String? = nil; var model: String = "en-US" }
+struct Configuration: Codable {
+    var libraryPath: String? = nil
+    var model: String = "en-US"
+    var engine: String = "apple"
+    var whisperVariant: String = WhisperTranscribe.defaultVariant
+}
 final class Library: @unchecked Sendable {
     let lock = NSRecursiveLock()
     let configDir: URL
@@ -48,16 +58,31 @@ final class Library: @unchecked Sendable {
         modelRoot = configDir.appendingPathComponent("models", isDirectory: true)
         try FileManager.default.createDirectory(at: modelRoot, withIntermediateDirectories: true)
         config = (try? JSONDecoder().decode(Configuration.self, from: Data(contentsOf: configDir.appendingPathComponent("config.json")))) ?? Configuration()
-        if config.model.hasPrefix("openai_whisper-") { config.model = "en-US"; try saveConfig() }
+        // Configs written before the engine setting stored a Whisper variant in `model`.
+        if config.model.hasPrefix("openai_whisper-") {
+            config.engine = Transcribe.Engine.whisper.rawValue
+            config.whisperVariant = WhisperTranscribe.isKnownVariant(config.model) ? config.model : WhisperTranscribe.defaultVariant
+            config.model = Transcribe.autoDetect
+            try saveConfig()
+        }
         if let path = initialLibrary?.path ?? env["MEETME_LIBRARY_DIR"] { config.libraryPath = path; try FileManager.default.createDirectory(atPath:path, withIntermediateDirectories:true) }
         try refresh(recover: true)
     }
     func locked<T>(_ body: () throws -> T) rethrows -> T { lock.lock(); defer { lock.unlock() }; return try body() }
     var libraryPath: String? { locked { config.libraryPath } }
     var model: String { locked { config.model } }
+    var engine: Transcribe.Engine { locked { Transcribe.Engine.parse(config.engine) } }
+    var whisperVariant: String { locked { config.whisperVariant } }
     func setModel(_ model: String) throws { try locked {
         guard !model.isEmpty, model.count <= 64 else { throw MeetMeError("Choose a supported transcription language") }
         config.model = model; try saveConfig()
+    } }
+    func setEngine(_ engine: Transcribe.Engine) throws { try locked {
+        config.engine = engine.rawValue; try saveConfig()
+    } }
+    func setWhisperVariant(_ variant: String) throws { try locked {
+        guard WhisperTranscribe.isKnownVariant(variant) else { throw MeetMeError("Unknown Whisper model \(variant)") }
+        config.whisperVariant = variant; try saveConfig()
     } }
     func selectFolder(_ url: URL) throws { try locked {
         guard !all().contains(where: { $0.status == "recording" || $0.jobStatus == "running" }) else { throw MeetMeError("Stop recording and processing before changing the library") }

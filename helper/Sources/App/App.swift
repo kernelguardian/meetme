@@ -13,13 +13,21 @@ actor Coordinator {
         func id() throws -> String { guard let id = request["recordingId"] as? String else { throw MeetMeError("Missing recordingId") }; return id }
         switch command {
         case "hello":
-            var result: [String:Any] = ["baseURL":server.baseURL,"token":server.token,"model":library.model,"protocolVersion":1,"ffmpegAvailable":MediaPrepare.available()]
+            var result: [String:Any] = ["baseURL":server.baseURL,"token":server.token,"model":library.model,"engine":library.engine.rawValue,"protocolVersion":1,"ffmpegAvailable":MediaPrepare.available()]
             result["libraryPath"] = library.libraryPath ?? NSNull() as Any
             return result
         case "status": return await jobs.state()
         case "settings":
-            if let model = request["model"] as? String { _ = try await Transcribe.locale(for: model); try library.setModel(model) }
-            return ["model":library.model,"languages":await Transcribe.languages(),"libraryPath":library.libraryPath ?? NSNull() as Any]
+            let engine = (request["engine"] as? String).map(Transcribe.Engine.parse) ?? library.engine
+            let language = request["model"] as? String ?? library.model
+            let variant = request["whisperVariant"] as? String ?? library.whisperVariant
+            if request["engine"] != nil || request["model"] != nil || request["whisperVariant"] != nil {
+                try await Transcribe.validate(engine:engine,language:language,variant:variant)
+                try library.setWhisperVariant(variant); try library.setEngine(engine); try library.setModel(language)
+            }
+            return ["model":library.model,"engine":library.engine.rawValue,"whisperVariant":library.whisperVariant,
+                    "engines":await Transcribe.engines(),"whisperVariants":WhisperTranscribe.variants,
+                    "libraryPath":library.libraryPath ?? NSNull() as Any]
         case "chooseFolder":
             let selection = await FolderPicker.choose()
             guard let selection else { throw MeetMeError("Folder selection cancelled") }

@@ -45,9 +45,9 @@ actor Jobs {
         guard !downloading else { return ["queued":true] }
         guard !suspended, !library.all().contains(where: { $0.status == "recording" || $0.jobStatus == "running" }) else { throw MeetMeError("Wait until recording and processing finish before downloading a model") }
         downloading = true; downloadError = nil
-        let model = library.model, root = library.modelRoot
+        let model = library.model, root = library.modelRoot, engine = library.engine, variant = library.whisperVariant
         downloadTask = Task.detached { [weak self] in
-            do { try await Transcribe.download(model:model,modelRoot:root); await self?.downloadFinished(nil) }
+            do { try await Transcribe.download(engine:engine,language:model,variant:variant,modelRoot:root); await self?.downloadFinished(nil) }
             catch is CancellationError { await self?.downloadCancelled() }
             catch { await self?.downloadFinished(error.localizedDescription) }
         }
@@ -56,39 +56,69 @@ actor Jobs {
     private func downloadFinished(_ error: String?) { downloading = false; downloadError = error }
     private func downloadCancelled() { downloading = false; downloadError = nil }
     func state() async -> [String:Any] {
-        var state: [String:Any] = ["processing":library.all().contains(where: { $0.jobStatus == "running" }),"modelReady":await Transcribe.isReady(model:library.model,modelRoot:library.modelRoot),"summaryAvailable":Summarize.availability,"downloading":downloading]
+        var state: [String:Any] = ["processing":library.all().contains(where: { $0.jobStatus == "running" }),"modelReady":await Transcribe.isReady(engine:library.engine,language:library.model,variant:library.whisperVariant,modelRoot:library.modelRoot),"summaryAvailable":Summarize.availability,"downloading":downloading,"engine":library.engine.rawValue,"whisperVariant":library.whisperVariant]
         if let error = downloadError { state["downloadError"] = error }
         state["recordingId"] = library.all().first(where: { $0.status == "recording" })?.id ?? NSNull() as Any
         return state
     }
     nonisolated static func process(_ rec: Recording,library: Library) async throws {
         try Task.checkCancellation()
-        let language = library.model
-        _ = try library.update(rec.id) { $0.jobStatus = "running"; $0.error = nil; $0.model = "apple-speech:" + language }
+        let engine = library.engine, language = library.model, variant = library.whisperVariant
+        _ = try library.update(rec.id) { $0.jobStatus = "running"; $0.error = nil; $0.summarySkipped = nil; $0.model = engine.rawValue + ":" + (engine == .whisper ? variant : language) }
         let folder = try library.folder(rec.id), work = folder.appendingPathComponent("work")
         try FileManager.default.createDirectory(at:work,withIntermediateDirectories:true)
+        let audio = work.appendingPathComponent("audio.wav")
+        let video = folder.appendingPathComponent("video.webm")
         var segments: [TranscriptSegment]
+        var spoken: String
         if rec.jobStage == "summary" {
             segments = try JSONDecoder().decode([TranscriptSegment].self,from:Data(contentsOf:folder.appendingPathComponent("transcript.json")))
+            spoken = rec.language ?? language
         } else {
-            try MediaPrepare.audio(video:folder.appendingPathComponent("video.webm"),output:work.appendingPathComponent("audio.wav"))
+            try MediaPrepare.audio(video:video,output:audio)
             try Task.checkCancellation()
-            segments = try await Transcribe.run(audio:work.appendingPathComponent("audio.wav"),model:language,modelRoot:library.modelRoot)
+            let outcome = try await Transcribe.run(audio:audio,engine:engine,language:language,variant:variant,modelRoot:library.modelRoot)
+            segments = outcome.segments; spoken = outcome.language
             try Task.checkCancellation()
             try durableWrite(JSONEncoder().encode(segments),to:folder.appendingPathComponent("transcript.json"))
             try durableWrite(Data(segments.map(\.text).joined(separator:"\n").utf8),to:folder.appendingPathComponent("transcript.txt"))
             let srt = segments.enumerated().map { "\($0.offset+1)\n\(timestamp($0.element.start)) --> \(timestamp($0.element.end))\n\($0.element.text)\n" }.joined(separator:"\n")
             try durableWrite(Data(srt.utf8),to:folder.appendingPathComponent("transcript.srt"))
-            _ = try library.update(rec.id) { $0.hasTranscript = true; $0.jobStage = rec.jobStage == "all" ? "summary" : "transcribe" }
+            _ = try library.update(rec.id) { $0.hasTranscript = true; $0.language = spoken; $0.jobStage = rec.jobStage == "all" ? "summary" : "transcribe" }
         }
         if rec.jobStage != "transcribe" {
             try Task.checkCancellation()
-            let summary = try await Summarize.run(segments:segments,work:work)
-            try durableWrite(Data(summary.utf8),to:folder.appendingPathComponent("summary.md"))
-            _ = try library.update(rec.id) { $0.hasSummary = true }
+            var source = segments
+            var skipped: String? = nil
+            if !Summarize.supportsLanguage(spoken) {
+                if engine == .whisper {
+                    // Apple Intelligence cannot read this language, so summarise Whisper's
+                    // English rendering of the same audio; timings still match the recording.
+                    if !FileManager.default.fileExists(atPath:audio.path) { try MediaPrepare.audio(video:video,output:audio) }
+                    let english = try await Transcribe.translateToEnglish(audio:audio,engine:engine,language:spoken,variant:variant,modelRoot:library.modelRoot)
+                    try durableWrite(Data(english.map(\.text).joined(separator:"\n").utf8),to:folder.appendingPathComponent("transcript.en.txt"))
+                    source = english
+                    _ = try library.update(rec.id) { $0.hasTranslation = true }
+                } else {
+                    skipped = "Apple Intelligence cannot summarise \(languageName(spoken)). Switch the engine to Whisper in Settings to get an English summary."
+                }
+            }
+            if let skipped {
+                _ = try library.update(rec.id) { $0.summarySkipped = skipped }
+            } else {
+                let summary = try await Summarize.run(segments:source,work:work)
+                try durableWrite(Data(summary.utf8),to:folder.appendingPathComponent("summary.md"))
+                _ = try library.update(rec.id) { $0.hasSummary = true }
+            }
         }
         _ = try library.update(rec.id) { $0.jobStatus = "completed"; $0.error = nil }
-        try? FileManager.default.removeItem(at:work.appendingPathComponent("audio.wav"))
+        try? FileManager.default.removeItem(at:audio)
+    }
+    nonisolated static func languageName(_ code: String) -> String {
+        let normalized = code.replacingOccurrences(of:"_",with:"-")
+        return Locale.current.localizedString(forIdentifier:normalized)
+            ?? Locale.current.localizedString(forLanguageCode:normalized)
+            ?? normalized
     }
     nonisolated static func timestamp(_ seconds: Double) -> String {
         let value = Int((max(0,seconds)*1000).rounded()), hours = value/3600000, minutes = (value/60000)%60, secs = (value/1000)%60, millis = value%1000
