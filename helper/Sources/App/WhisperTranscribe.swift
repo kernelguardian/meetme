@@ -1,6 +1,20 @@
 import Foundation
 import WhisperKit
 
+/// WhisperKit reports download progress far more often than the UI polls, and each
+/// report costs an actor hop. Collapse it to whole percentage points.
+final class ProgressThrottle: @unchecked Sendable {
+    private let lock = NSLock()
+    private var last = -1
+    func shouldReport(_ fraction: Double) -> Bool {
+        let step = Int((fraction * 100).rounded(.down))
+        lock.lock(); defer { lock.unlock() }
+        guard step != last else { return false }
+        last = step
+        return true
+    }
+}
+
 /// WhisperKit. Slower and needs a model download, but covers ~99 languages —
 /// including the Indic languages Apple's SpeechAnalyzer has no assets for — and
 /// can both auto-detect the spoken language and translate it into English.
@@ -110,11 +124,15 @@ enum WhisperTranscribe {
         return try await whisper.detectLanguage(audioPath: audio.path).language
     }
 
-    static func download(variant: String, modelRoot: URL) async throws {
+    static func download(variant: String, modelRoot: URL, progress: (@Sendable (Double) -> Void)? = nil) async throws {
         try Task.checkCancellation()
         guard isKnownVariant(variant) else { throw MeetMeError("Unknown Whisper model \(variant)") }
         try FileManager.default.createDirectory(at: modelRoot, withIntermediateDirectories: true)
-        let folder = try await WhisperKit.download(variant: variant, downloadBase: modelRoot)
+        let throttle = ProgressThrottle()
+        let folder = try await WhisperKit.download(variant: variant, downloadBase: modelRoot) { value in
+            let fraction = value.fractionCompleted
+            if throttle.shouldReport(fraction) { progress?(fraction) }
+        }
         // Fetch and persist the tokenizer now, so later inference remains offline.
         let whisper = try await WhisperKit(
             model: variant,

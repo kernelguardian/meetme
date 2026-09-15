@@ -74,10 +74,10 @@ enum Transcribe {
         return try await WhisperTranscribe.run(audio: audio, variant: variant, language: language, translate: true, modelRoot: modelRoot).segments
     }
 
-    static func download(engine: Engine, language: String, variant: String, modelRoot: URL) async throws {
+    static func download(engine: Engine, language: String, variant: String, modelRoot: URL, progress: (@Sendable (Double) -> Void)? = nil) async throws {
         switch engine {
         case .apple: try await AppleTranscribe.download(model: language)
-        case .whisper: try await WhisperTranscribe.download(variant: variant, modelRoot: modelRoot)
+        case .whisper: try await WhisperTranscribe.download(variant: variant, modelRoot: modelRoot, progress: progress)
         }
     }
 

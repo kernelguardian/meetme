@@ -24,7 +24,13 @@ Apple's SpeechAnalyzer (30 locales, no download) and WhisperKit via argmax-oss-s
 - Settings and library UI with engine/language/model selection, download status, search,
   pagination, transcript seeking, rendered summaries with seekable citations,
   playback renewal, recovery, cleanup, re-transcription and re-summary controls.
-- Personal installer, native-host template and setup documentation.
+- Single-command installer (`Install MeetMe.command` / `install/install.sh`, no arguments)
+  that builds, signs and installs the helper and registers it in both Brave's and Chrome's
+  native-messaging host directories. The extension ID is pinned by the public key in
+  `extension/manifest.json`, so registration no longer waits on a hand-copied ID, and
+  `--uninstall` reverses everything except the recordings.
+- Model download progress reporting with a cancel action, surfaced as a determinate bar in
+  Settings; Apple asset installs report no fraction and render an indeterminate bar.
 
 ## Checks that passed
 

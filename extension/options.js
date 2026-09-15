@@ -2,6 +2,8 @@ const $ = s => document.querySelector(s);
 const keepAlive = chrome.runtime.connect({ name: 'meetme-ui' });
 const AUTO = 'auto';
 let polling;
+let pollingFast = false;
+let saveNoteTimer;
 let choosingFolder = false;
 let engines = [];
 let variants = [];
@@ -82,15 +84,38 @@ function summaryMessage(state) {
   if (configured.engine === 'whisper') return ['On-device summaries are available. Languages Apple Intelligence cannot read are translated to English first.', 'ok'];
   return ['On-device summaries are available.', 'ok'];
 }
+function renderDownload(state) {
+  const active = !!state.downloading;
+  $('#cancel-download').hidden = !active;
+  $('#download-progress').hidden = !active;
+  $('#download-language').hidden = active;
+  if (!active) return;
+  const fraction = typeof state.downloadProgress === 'number' ? state.downloadProgress : null;
+  const percent = fraction === null ? null : Math.round(fraction * 100);
+  const bar = $('#progress-bar');
+  bar.classList.toggle('indeterminate', percent === null);
+  bar.style.width = percent === null ? '' : `${percent}%`;
+  $('#progress-label').textContent = percent === null ? '' : `${percent}%`;
+}
+// A download only reports progress usefully if the page asks often enough to see it.
+function setPollInterval(fast) {
+  if (polling && pollingFast === fast) return;
+  pollingFast = fast;
+  clearInterval(polling);
+  polling = setInterval(refreshStatus, fast ? 600 : 3000);
+}
 async function refreshStatus() {
   if (choosingFolder) return;
   try {
     const state = await native('status');
     stat('#language-status', ...languageMessage(state));
+    renderDownload(state);
+    setPollInterval(!!state.downloading);
     $('#download-language').disabled = !!state.downloading || !!state.processing || !!state.recordingId || $('#language').disabled;
     stat('#summary-status', ...summaryMessage(state));
   } catch (error) {
     stat('#language-status', `Helper unavailable: ${error.message}`, 'bad');
+    renderDownload({});
     $('#download-language').disabled = true;
   }
 }
@@ -114,13 +139,25 @@ $('#grant').onclick = () => run($('#grant'), async () => {
   await loadDevices();
   stat('#mic-status', 'Microphone access granted.', 'ok');
 }, error => { stat('#mic-status', `Microphone unavailable: ${error.message}`, 'bad'); });
+function markUnsaved() {
+  $('#save-note').hidden = true;
+  stat('#language-status', 'Unsaved changes. Choose Save to apply them.', 'warn');
+}
 $('#engine').onchange = () => {
   syncEngineUI();
   populateLanguages(configured.engine === $('#engine').value ? configured.model : undefined);
-  stat('#language-status', 'Unsaved changes. Choose Save to apply them.', 'warn');
+  markUnsaved();
 };
-$('#whisper-variant').onchange = () => stat('#language-status', 'Unsaved changes. Choose Save to apply them.', 'warn');
-$('#language').onchange = () => stat('#language-status', 'Unsaved changes. Choose Save to apply them.', 'warn');
+$('#whisper-variant').onchange = markUnsaved;
+$('#language').onchange = markUnsaved;
+// refreshStatus immediately rewrites the status line, so the confirmation gets its
+// own element rather than being overwritten a moment after the user clicks Save.
+function confirmSaved() {
+  const note = $('#save-note');
+  note.hidden = false;
+  clearTimeout(saveNoteTimer);
+  saveNoteTimer = setTimeout(() => { note.hidden = true; }, 3000);
+}
 $('#save-language').onclick = () => run($('#save-language'), async () => {
   const result = await native('settings', {
     engine: $('#engine').value,
@@ -128,9 +165,14 @@ $('#save-language').onclick = () => run($('#save-language'), async () => {
     whisperVariant: $('#whisper-variant').value,
   });
   applySettings(result);
-  stat('#language-status', 'Saved.', 'ok');
+  confirmSaved();
   await refreshStatus();
 }, error => { stat('#language-status', `Could not save: ${error.message}`, 'bad'); });
+$('#cancel-download').onclick = () => run($('#cancel-download'), async () => {
+  await native('cancelDownload');
+  await refreshStatus();
+  stat('#language-status', 'Download cancelled.', 'warn');
+}, error => { stat('#language-status', `Could not cancel: ${error.message}`, 'bad'); });
 $('#device').onchange = async () => {
   try { await chrome.storage.local.set({ microphoneDeviceId: $('#device').value }); }
   catch (error) { stat('#mic-status', `Could not save microphone: ${error.message}`, 'bad'); }
@@ -171,7 +213,7 @@ function applySettings(settings) {
     catch (error) { stat('#mic-status', `Microphone list unavailable: ${error.message}`, 'bad'); }
     $('#device').value = local.microphoneDeviceId || '';
     await refreshStatus();
-    polling = setInterval(refreshStatus, 3_000);
+    setPollInterval(false);
   } catch (error) {
     $('#library').textContent = `Helper unavailable: ${error.message}`;
     stat('#language-status', 'Transcription settings cannot be loaded.', 'bad');

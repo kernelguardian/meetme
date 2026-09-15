@@ -7,6 +7,7 @@ actor Jobs {
     private var suspended = false
     private var downloading = false
     private var downloadError: String? = nil
+    private var downloadProgress: Double? = nil
     init(_ library: Library) { self.library = library }
     func pause() async {
         suspended = true
@@ -44,20 +45,40 @@ actor Jobs {
     func download() throws -> [String:Any] {
         guard !downloading else { return ["queued":true] }
         guard !suspended, !library.all().contains(where: { $0.status == "recording" || $0.jobStatus == "running" }) else { throw MeetMeError("Wait until recording and processing finish before downloading a model") }
-        downloading = true; downloadError = nil
+        downloading = true; downloadError = nil; downloadProgress = 0
         let model = library.model, root = library.modelRoot, engine = library.engine, variant = library.whisperVariant
         downloadTask = Task.detached { [weak self] in
-            do { try await Transcribe.download(engine:engine,language:model,variant:variant,modelRoot:root); await self?.downloadFinished(nil) }
+            // Bound to a `let` so the @Sendable progress closure captures an immutable
+            // actor reference rather than the mutable `self` var.
+            let jobs = self
+            do {
+                try await Transcribe.download(engine:engine,language:model,variant:variant,modelRoot:root) { fraction in
+                    Task { await jobs?.setDownloadProgress(fraction) }
+                }
+                await jobs?.downloadFinished(nil)
+            }
             catch is CancellationError { await self?.downloadCancelled() }
             catch { await self?.downloadFinished(error.localizedDescription) }
         }
         return ["queued":true]
     }
-    private func downloadFinished(_ error: String?) { downloading = false; downloadError = error }
-    private func downloadCancelled() { downloading = false; downloadError = nil }
+    func cancelDownload() async -> [String:Any] {
+        guard downloading, let task = downloadTask else { return ["cancelled":false] }
+        task.cancel()
+        await task.value
+        downloadTask = nil
+        downloading = false; downloadProgress = nil; downloadError = nil
+        return ["cancelled":true]
+    }
+    private func setDownloadProgress(_ fraction: Double) { if downloading { downloadProgress = fraction } }
+    private func downloadFinished(_ error: String?) { downloading = false; downloadProgress = nil; downloadError = error }
+    private func downloadCancelled() { downloading = false; downloadProgress = nil; downloadError = nil }
     func state() async -> [String:Any] {
         var state: [String:Any] = ["processing":library.all().contains(where: { $0.jobStatus == "running" }),"modelReady":await Transcribe.isReady(engine:library.engine,language:library.model,variant:library.whisperVariant,modelRoot:library.modelRoot),"summaryAvailable":Summarize.availability,"downloading":downloading,"engine":library.engine.rawValue,"whisperVariant":library.whisperVariant]
         if let error = downloadError { state["downloadError"] = error }
+        if let progress = downloadProgress { state["downloadProgress"] = progress }
+        // The library page watches this so choosing a different folder reloads the list.
+        state["libraryPath"] = library.libraryPath ?? NSNull() as Any
         state["recordingId"] = library.all().first(where: { $0.status == "recording" })?.id ?? NSNull() as Any
         return state
     }

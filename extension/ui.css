@@ -186,6 +186,66 @@ a:hover { color: var(--accent-hover); text-decoration: underline; }
 .card-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
 .card-controls select { max-width: 420px; }
 
+.saved-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ok);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.saved-note::before {
+  content: "✓";
+  font-size: 13px;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+/* Apple's asset installer reports no fraction, so that case animates instead. */
+.progress-bar.indeterminate {
+  width: 35%;
+  animation: slide 1.2s ease-in-out infinite;
+}
+
+@keyframes slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(340%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar.indeterminate { animation: none; width: 100%; opacity: 0.5; }
+}
+
+.progress-label {
+  flex: none;
+  min-width: 38px;
+  text-align: right;
+  font: 500 12px var(--mono);
+  color: var(--muted);
+}
+
 .field-row {
   display: flex;
   align-items: center;

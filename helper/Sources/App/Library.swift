@@ -39,6 +39,44 @@ struct Recording: Codable {
     var hasTranslation: Bool = false
     /// Why a ready transcript has no summary, when that is expected rather than a failure.
     var summarySkipped: String? = nil
+
+    // meta.json is long-lived on disk and gains fields as MeetMe grows. Swift's
+    // synthesized decoder ignores property defaults and throws on any missing key,
+    // which would make every recording written by an older build unreadable — so
+    // decode defensively and let absent fields fall back to their defaults.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        title = try values.decode(String.self, forKey: .title)
+        platform = try values.decode(String.self, forKey: .platform)
+        createdAt = try values.decode(String.self, forKey: .createdAt)
+        endedAt = try values.decodeIfPresent(String.self, forKey: .endedAt)
+        duration = try values.decodeIfPresent(Double.self, forKey: .duration)
+        status = try values.decodeIfPresent(String.self, forKey: .status) ?? "recording"
+        jobStatus = try values.decodeIfPresent(String.self, forKey: .jobStatus) ?? "none"
+        jobStage = try values.decodeIfPresent(String.self, forKey: .jobStage) ?? "all"
+        error = try values.decodeIfPresent(String.self, forKey: .error)
+        micEnabled = try values.decodeIfPresent(Bool.self, forKey: .micEnabled) ?? false
+        participants = try values.decodeIfPresent([String].self, forKey: .participants)
+        chunkCount = try values.decodeIfPresent(Int.self, forKey: .chunkCount) ?? 0
+        totalBytes = try values.decodeIfPresent(Int.self, forKey: .totalBytes) ?? 0
+        chunks = try values.decodeIfPresent([String: ChunkReceipt].self, forKey: .chunks) ?? [:]
+        model = try values.decodeIfPresent(String.self, forKey: .model)
+        language = try values.decodeIfPresent(String.self, forKey: .language)
+        hasTranscript = try values.decodeIfPresent(Bool.self, forKey: .hasTranscript) ?? false
+        hasSummary = try values.decodeIfPresent(Bool.self, forKey: .hasSummary) ?? false
+        hasTranslation = try values.decodeIfPresent(Bool.self, forKey: .hasTranslation) ?? false
+        summarySkipped = try values.decodeIfPresent(String.self, forKey: .summarySkipped)
+    }
+
+    init(id: String, title: String, platform: String, createdAt: String, micEnabled: Bool, participants: [String]? = nil) {
+        self.id = id
+        self.title = title
+        self.platform = platform
+        self.createdAt = createdAt
+        self.micEnabled = micEnabled
+        self.participants = participants
+    }
 }
 struct Configuration: Codable {
     var libraryPath: String? = nil

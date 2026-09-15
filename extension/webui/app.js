@@ -12,6 +12,7 @@ let playbackRetries = 0;
 let statusPoll;
 let wasProcessing = false;
 let activeSegment;
+let knownLibraryPath;
 
 async function native(command, params = {}) {
   const reply = await chrome.runtime.sendMessage({ type: 'native-request', command, params });
@@ -326,6 +327,19 @@ async function action(command, params = {}) {
 async function pollStatus() {
   try {
     const status = await native('status');
+    // Choosing a different folder in Settings swaps the whole library underneath us.
+    if (status.libraryPath !== undefined && status.libraryPath !== knownLibraryPath) {
+      const firstReading = knownLibraryPath === undefined;
+      knownLibraryPath = status.libraryPath;
+      if (!firstReading) {
+        selected = undefined;
+        $('#detail').classList.add('hidden');
+        $('#list').classList.remove('hidden');
+        await list(true);
+        notice(recordingTotal ? `${recordingTotal} recording${recordingTotal === 1 ? '' : 's'} in the new library folder` : 'The new library folder has no recordings yet.');
+        return;
+      }
+    }
     if (status.processing || status.downloading) {
       notice(status.downloading ? 'Language asset download is in progress.' : 'Processing is in progress.');
       if (selected) await loadDetail(true);

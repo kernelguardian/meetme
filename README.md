@@ -39,31 +39,43 @@ recording says why.
 
 ## Install for personal use
 
-From this project directory:
+Double-click **`Install MeetMe.command`** in Finder, or run this from the project directory:
 
-1. Open `brave://extensions`, enable **Developer mode**, choose **Load unpacked**, and
-   select the `extension` folder. Copy the extension's ID.
-2. Build and register the helper:
+```sh
+./install/install.sh
+```
 
-   ```sh
-   ./install/install.sh --extension-id YOUR_32_CHARACTER_EXTENSION_ID
-   ```
+That builds the helper, signs it, installs it, and registers it for the extension. It takes
+no arguments: the extension's ID is pinned by the public key in `extension/manifest.json`,
+so the installer knows the ID before the extension has ever been loaded.
 
-3. Reload the extension in Brave. Open MeetMe's **Settings**, choose your recording folder,
-   configure microphone access, then pick a transcription engine and language. On the Apple
-   engine you may optionally pre-install that language's speech assets; on Whisper you must
-   download the model before the first recording is processed.
-4. Open a meeting tab. Invoke MeetMe and click **Record**. Click **Stop** when finished;
-   leave Brave running while local processing completes. Open **Library** for playback,
-   transcript, summary and retry controls.
+Brave does not let any script install an extension, so one manual step remains and the
+installer walks you through it: open `brave://extensions`, turn on **Developer mode**, choose
+**Load unpacked**, and select this project's `extension` folder. The installer opens that page
+for you and detects on later runs whether the step is already done.
 
-The installer registers `com.meetme.helper` in Brave's Chrome-compatible native-messaging
-host directory, `~/Library/Application Support/Google/Chrome/NativeMessagingHosts`. It copies
-the `MeetMeHelper` product and any SwiftPM `.bundle` resources to
+Then open MeetMe's **Settings** to choose a recordings folder, configure microphone access,
+and pick a transcription engine and language. On the Apple engine you may optionally
+pre-install that language's speech assets; on Whisper you must download the model first.
+
+To record: open a meeting tab, invoke MeetMe and click **Record**. Click **Stop** when
+finished and leave Brave running while local processing completes. Open **Library** for
+playback, transcript, summary and retry controls.
+
+`./install/install.sh --uninstall` removes the helper and its registrations, leaving your
+recordings untouched. Run `--help` for the remaining options.
+
+The installer registers `com.meetme.helper` in both Brave's own native-messaging host
+directory and the Chrome-compatible one, so it works whichever Brave consults. It copies the
+`MeetMeHelper` product and any SwiftPM `.bundle` resources (WhisperKit ships some) to
 `~/Library/Application Support/MeetMe/bin`, then ad-hoc signs the copied binary. It does not
 install a daemon. Brave launches the helper on demand. Re-run the installer after helper
-changes; reload the extension after extension changes. If the unpacked extension ID changes,
-run the installer with the new ID.
+changes; reload the extension after extension changes.
+
+Because the extension ID is derived from the manifest's `key`, it no longer changes when the
+folder moves and never needs to be copied by hand. If you previously loaded MeetMe before
+that key existed, Brave still lists the old copy under its old ID: remove it and load the
+folder again.
 
 Preview installation without changing anything:
 

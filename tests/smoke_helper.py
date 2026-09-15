@@ -186,6 +186,26 @@ def main():
                 recovered = host.request('recover', recordingId=identifier)
                 assert recovered['status'] == 'ready', recovered
                 completed.append('stdin EOF exit, credential rotation and committed-media recovery after restart')
+
+                # A selected folder can already hold recordings from an older build, which
+                # is exactly what happens when MeetMe is pointed back at a previous library.
+                # meta.json gains fields over time, so decoding must tolerate older shapes
+                # rather than silently dropping every recording it cannot fully decode.
+                legacy_id = '11111111-2222-3333-4444-555555555555'
+                legacy = temporary / 'library' / f'2020-01-01T00-00-00Z_Legacy_{legacy_id}'
+                legacy.mkdir(parents=True)
+                (legacy / 'meta.json').write_text(json.dumps({
+                    'id': legacy_id,
+                    'title': 'Legacy recording',
+                    'platform': 'test',
+                    'createdAt': '2020-01-01T00:00:00Z',
+                }))
+                host.close()
+                host = Host(binary, env, log)
+                host.request('hello')
+                listing = host.request('list', offset=0, limit=50, query='')
+                assert any(item['id'] == legacy_id for item in listing['items']), listing
+                completed.append('recordings from older builds stay visible when a library folder is reopened')
                 host.close()
                 host = None
             except BaseException:

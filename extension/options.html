@@ -61,7 +61,15 @@
       <div class="card-controls">
         <button id="save-language" class="btn btn-primary" disabled>Save</button>
         <button id="download-language" class="btn" disabled>Download</button>
+        <button id="cancel-download" class="btn btn-danger" hidden>Cancel download</button>
+        <span id="save-note" class="saved-note" role="status" hidden>Saved</span>
       </div>
+
+      <div id="download-progress" class="progress" hidden>
+        <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+        <span id="progress-label" class="progress-label"></span>
+      </div>
+
       <p id="language-status" class="stat-row" role="status"></p>
       <p id="summary-status" class="stat-row"></p>
     </section>
