@@ -13,6 +13,9 @@ let statusPoll;
 let wasProcessing = false;
 let activeSegment;
 let knownLibraryPath;
+let jobProgress = null;
+let pollingFast = false;
+const shownRecordings = new Map();
 
 async function native(command, params = {}) {
   const reply = await chrome.runtime.sendMessage({ type: 'native-request', command, params });
@@ -44,9 +47,15 @@ function metaParts(recording) {
 }
 // jobStage names the work still outstanding, and advances as the job runs.
 const STAGE_LABEL = { all: 'Transcribing…', transcribe: 'Transcribing…', summary: 'Summarising…' };
+// The live stage reported by the helper while a job is actually running.
+const STAGE_RUNNING = { transcribe: 'Transcribing', translate: 'Translating', summary: 'Summarising' };
 function statusPill(recording) {
   const { status, jobStatus, jobStage } = recording;
-  if (jobStatus === 'running') return [STAGE_LABEL[jobStage] || 'Processing…', 'pill-busy'];
+  if (jobStatus === 'running') {
+    const live = jobProgress?.id === recording.id ? jobProgress : null;
+    if (live) return [`${STAGE_RUNNING[live.stage] || 'Processing'} ${Math.round(live.fraction * 100)}%`, 'pill-busy'];
+    return [STAGE_LABEL[jobStage] || 'Processing…', 'pill-busy'];
+  }
   if (jobStatus === 'queued') return ['Queued', 'pill-busy'];
   if (jobStatus === 'failed' || status === 'failed') return ['Failed', 'pill-bad'];
   if (status === 'incomplete') return ['Incomplete', 'pill-warn'];
@@ -82,6 +91,8 @@ function item(recording) {
   const card = document.createElement('button');
   card.type = 'button';
   card.className = 'rec';
+  card.dataset.id = recording.id;
+  shownRecordings.set(recording.id, recording);
   card.onclick = () => openRecording(recording.id);
   const title = document.createElement('span');
   title.className = 'rec-title';
@@ -126,6 +137,7 @@ async function list(reset = true) {
     if (reset) {
       recordingOffset = 0;
       recordingTotal = 0;
+      shownRecordings.clear();
       $('#list').replaceChildren(...skeletons());
     }
     notice(recordingOffset ? 'Loading more recordings…' : 'Loading library…');
@@ -324,9 +336,32 @@ async function action(command, params = {}) {
     if (!completed && button) button.disabled = false;
   }
 }
+// Repaint only the pill of the recording being worked on, so a live percentage does
+// not cost a full re-render (and the reading stays smooth) while the user scrolls.
+function refreshPills() {
+  for (const card of $('#list').children) {
+    const recording = shownRecordings.get(card.dataset?.id);
+    const badge = recording && card.querySelector('.pill');
+    if (!badge) continue;
+    const [label, variant] = statusPill(recording);
+    badge.textContent = label;
+    badge.className = variant ? `pill ${variant}` : 'pill';
+  }
+}
+function setPollInterval(fast) {
+  if (statusPoll && pollingFast === fast) return;
+  pollingFast = fast;
+  clearInterval(statusPoll);
+  statusPoll = setInterval(pollStatus, fast ? 1500 : 5000);
+}
 async function pollStatus() {
   try {
     const status = await native('status');
+    jobProgress = typeof status.jobProgress === 'number' && status.jobRecordingId
+      ? { id: status.jobRecordingId, stage: status.jobStage, fraction: status.jobProgress }
+      : null;
+    setPollInterval(!!status.processing || !!status.downloading);
+    refreshPills();
     // Choosing a different folder in Settings swaps the whole library underneath us.
     if (status.libraryPath !== undefined && status.libraryPath !== knownLibraryPath) {
       const firstReading = knownLibraryPath === undefined;
@@ -341,7 +376,9 @@ async function pollStatus() {
       }
     }
     if (status.processing || status.downloading) {
-      notice(status.downloading ? 'Language asset download is in progress.' : 'Processing is in progress.');
+      const percent = jobProgress ? ` — ${Math.round(jobProgress.fraction * 100)}%` : '';
+      const doing = jobProgress ? (STAGE_RUNNING[jobProgress.stage] || 'Processing').toLowerCase() : 'processing';
+      notice(status.downloading ? 'Language asset download is in progress.' : `Currently ${doing}${percent}.`);
       if (selected) await loadDetail(true);
     } else if (wasProcessing) {
       if (selected) await loadDetail(true);
@@ -402,6 +439,8 @@ $('#video').addEventListener('error', async () => {
     playbackRefreshInFlight = false;
   }
 });
-statusPoll = setInterval(pollStatus, 5_000);
+setPollInterval(false);
 window.addEventListener('unload', () => clearInterval(statusPoll));
-list();
+// Ask once on load rather than waiting out the first interval, so an in-flight job
+// shows its progress straight away.
+list().then(pollStatus);

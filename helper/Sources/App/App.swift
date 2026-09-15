@@ -76,7 +76,7 @@ actor Coordinator {
             let summary = (try? String(contentsOf:folder.appendingPathComponent("summary.md"),encoding:.utf8)) ?? ""
             return ["recording":library.dictionary(rec),"segments":encoded,"totalSegments":segments.count,"summary":String(summary.prefix(150000))]
         case "playback": return try server.playback(id:id())
-        case "reprocess": return library.dictionary(try await jobs.enqueue(id:id(),stage:request["stage"] as? String ?? "all"))
+        case "reprocess": return library.dictionary(try await jobs.enqueue(id:id(),stage:request["stage"] as? String ?? "all",language:request["language"] as? String))
         case "downloadModel": return try await jobs.download()
         case "cancelDownload": return await jobs.cancelDownload()
         case "cleanup": return library.dictionary(try store.cleanup(id:id()))

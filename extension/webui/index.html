@@ -44,6 +44,13 @@
         <div class="detail-main">
           <video id="video" controls preload="metadata"></video>
 
+          <div class="language-fix">
+            <label class="language-fix-label" for="detail-language">Spoken language</label>
+            <select id="detail-language" class="grow"></select>
+            <button id="retranscribe" class="btn">Re-transcribe</button>
+          </div>
+          <p id="language-hint" class="small dim"></p>
+
           <div class="btn-row detail-actions">
             <button id="retry-all" class="btn">Reprocess all</button>
             <button id="retry-transcript" class="btn">Reprocess transcript</button>

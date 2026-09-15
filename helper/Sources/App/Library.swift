@@ -34,6 +34,9 @@ struct Recording: Codable {
     var model: String? = nil
     /// The language actually transcribed, which for auto-detect is what Whisper heard.
     var language: String? = nil
+    /// Set when the listener corrects a wrong auto-detection; overrides the global
+    /// setting for this recording only, and survives later reprocessing.
+    var languageOverride: String? = nil
     var hasTranscript: Bool = false
     var hasSummary: Bool = false
     var hasTranslation: Bool = false
@@ -63,6 +66,7 @@ struct Recording: Codable {
         chunks = try values.decodeIfPresent([String: ChunkReceipt].self, forKey: .chunks) ?? [:]
         model = try values.decodeIfPresent(String.self, forKey: .model)
         language = try values.decodeIfPresent(String.self, forKey: .language)
+        languageOverride = try values.decodeIfPresent(String.self, forKey: .languageOverride)
         hasTranscript = try values.decodeIfPresent(Bool.self, forKey: .hasTranscript) ?? false
         hasSummary = try values.decodeIfPresent(Bool.self, forKey: .hasSummary) ?? false
         hasTranslation = try values.decodeIfPresent(Bool.self, forKey: .hasTranslation) ?? false

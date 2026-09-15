@@ -33,7 +33,7 @@ enum Summarize {
         return SystemLanguageModel.default.supportedLanguages.contains { $0.languageCode?.identifier == code }
     }
 
-    static func run(segments: [TranscriptSegment], work: URL) async throws -> String {
+    static func run(segments: [TranscriptSegment], work: URL, progress: (@Sendable (Double) -> Void)? = nil) async throws -> String {
         try Task.checkCancellation()
         guard !segments.isEmpty else { return "# Meeting summary\n\nNo transcribed speech was available." }
         guard #available(macOS 26.0, *) else { throw SummaryError.unavailable(availability) }
@@ -44,11 +44,15 @@ enum Summarize {
         guard !chunks.isEmpty else { return "# Meeting summary\n\nNo transcribed speech was available." }
         var checkpoint = try loadCheckpoint(from: work, chunks: chunks)
 
+        // Per-chunk work dominates; reserve the last tenth for reduction and the
+        // final pass so the reported figure never stalls at 100%.
+        progress?(Double(checkpoint.completed.count) / Double(chunks.count) * 0.9)
         for index in checkpoint.completed.count ..< chunks.count {
             try Task.checkCancellation()
             let result = try await ask(chunkPrompt(chunks[index]))
             checkpoint.completed.append(result)
             try saveCheckpoint(checkpoint, to: work)
+            progress?(Double(index + 1) / Double(chunks.count) * 0.9)
         }
 
         var reductions = checkpoint.completed

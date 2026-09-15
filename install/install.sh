@@ -20,8 +20,15 @@ meetme_ffmpeg="${MEETME_FFMPEG:-}"
 meetme_ffprobe="${MEETME_FFPROBE:-}"
 meetme_extension_dir="$meetme_repo/extension"
 
-meetme_brave_hosts="$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
-meetme_chrome_hosts="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+# The extension is plain Chromium MV3, so it runs in any Chromium browser. Each keeps
+# its native-messaging hosts in its own directory: Name|App|hosts dir|profile root
+meetme_browsers=(
+  "Brave|/Applications/Brave Browser.app|$HOME/Library/Application Support/BraveSoftware/Brave-Browser"
+  "Chrome|/Applications/Google Chrome.app|$HOME/Library/Application Support/Google/Chrome"
+  "Edge|/Applications/Microsoft Edge.app|$HOME/Library/Application Support/Microsoft Edge"
+  "Vivaldi|/Applications/Vivaldi.app|$HOME/Library/Application Support/Vivaldi"
+  "Chromium|/Applications/Chromium.app|$HOME/Library/Application Support/Chromium"
+)
 
 usage() {
   cat <<'USAGE'
@@ -69,22 +76,43 @@ done
 [ "$(uname -s)" = Darwin ] || fail "MeetMe requires macOS."
 command -v python3 >/dev/null || fail "Python 3 is required."
 
+meetme_host_dirs=()
+meetme_browser_names=()
+meetme_profile_roots=()
 if [ -n "$meetme_host_dir" ]; then
   meetme_host_dirs=("$meetme_host_dir")
+  meetme_browser_names=("the requested directory")
 else
-  meetme_host_dirs=("$meetme_brave_hosts" "$meetme_chrome_hosts")
+  for meetme_entry in "${meetme_browsers[@]}"; do
+    meetme_name="${meetme_entry%%|*}"
+    meetme_rest="${meetme_entry#*|}"
+    meetme_app="${meetme_rest%%|*}"
+    meetme_support="${meetme_rest#*|}"
+    # Uninstall sweeps every known browser; install only touches the ones present.
+    if [ -d "$meetme_app" ] || { [ "$meetme_uninstall" = 1 ] && [ -d "$meetme_support" ]; }; then
+      meetme_host_dirs+=("$meetme_support/NativeMessagingHosts")
+      meetme_browser_names+=("$meetme_name")
+      meetme_profile_roots+=("$meetme_support")
+    fi
+  done
+  [ "${#meetme_host_dirs[@]}" -gt 0 ] || fail "No Chromium browser found. Install Brave or Chrome, then run this again."
 fi
 for meetme_destination in "$meetme_install_root" "${meetme_host_dirs[@]}"; do
   case "$meetme_destination" in /*) ;; *) fail "Destination paths must be absolute." ;; esac
 done
 
 if [ "$meetme_uninstall" = 1 ]; then
-  for meetme_dir in "${meetme_host_dirs[@]}"; do
-    rm -f "$meetme_dir/com.meetme.helper.json" && say "Removed registration in $meetme_dir"
+  for meetme_index in "${!meetme_host_dirs[@]}"; do
+    meetme_dir="${meetme_host_dirs[$meetme_index]}"
+    if [ -f "$meetme_dir/com.meetme.helper.json" ]; then
+      rm -f "$meetme_dir/com.meetme.helper.json"
+      say "Unregistered from ${meetme_browser_names[$meetme_index]}"
+    fi
   done
   rm -rf "$meetme_install_root/bin"
   say "Removed the helper from $meetme_install_root/bin"
-  say "Remove the extension yourself in brave://extensions. Recordings were not touched."
+  say "Your recordings and the folder you chose were not touched."
+  say "Last step: remove the MeetMe extension from your browser's extensions page."
   exit 0
 fi
 
@@ -203,38 +231,55 @@ for host_dir in host_dirs:
     temporary.write_text(json.dumps(manifest, indent=2) + '\n')
     temporary.chmod(0o600)
     os.replace(temporary, manifest_path)
-    print(f'MeetMe: registered in {host_dir}')
 PY
 
-# Chromium records installed extensions per profile; use that to tell the user whether
-# the one remaining manual step is still outstanding.
-meetme_already_loaded=0
-if [ -d "$HOME/Library/Application Support/BraveSoftware/Brave-Browser" ]; then
-  while IFS= read -r meetme_prefs; do
-    if grep -q "$meetme_id" "$meetme_prefs" 2>/dev/null; then meetme_already_loaded=1; break; fi
-  done < <(find "$HOME/Library/Application Support/BraveSoftware/Brave-Browser" -maxdepth 2 \
-             \( -name Preferences -o -name 'Secure Preferences' \) 2>/dev/null)
+# Chromium records installed extensions per profile; use that to report which browsers
+# still need the one manual step.
+meetme_loaded_in=()
+meetme_missing_in=()
+for meetme_index in "${!meetme_host_dirs[@]}"; do
+  meetme_name="${meetme_browser_names[$meetme_index]}"
+  meetme_root="${meetme_profile_roots[$meetme_index]:-}"
+  meetme_found=0
+  if [ -n "$meetme_root" ] && [ -d "$meetme_root" ]; then
+    while IFS= read -r meetme_prefs; do
+      if grep -q "$meetme_id" "$meetme_prefs" 2>/dev/null; then meetme_found=1; break; fi
+    done < <(find "$meetme_root" -maxdepth 2 \( -name Preferences -o -name 'Secure Preferences' \) 2>/dev/null)
+  fi
+  if [ "$meetme_found" = 1 ]; then meetme_loaded_in+=("$meetme_name"); else meetme_missing_in+=("$meetme_name"); fi
+done
+
+echo
+say "Helper installed at $meetme_install_root/bin/MeetMeHelper"
+say "Registered for: ${meetme_browser_names[*]}"
+say "Extension ID:   $meetme_id"
+
+if [ "${#meetme_loaded_in[@]}" -gt 0 ]; then
+  echo
+  say "Already loaded in: ${meetme_loaded_in[*]}. Reload it there to pick up this build."
 fi
 
-say "Helper installed at $meetme_install_root/bin/MeetMeHelper"
-say "Extension ID: $meetme_id"
-if [ "$meetme_already_loaded" = 1 ]; then
-  say "The extension is already loaded. Reload it in brave://extensions to pick up this build."
-else
+if [ "${#meetme_missing_in[@]}" -gt 0 ]; then
   cat <<EOF
 
-MeetMe: one step left, which only a person can do — Brave does not allow a script
-to install an extension.
+One step is left, and only a person can do it: a browser will not let a script
+install an extension. In ${meetme_missing_in[*]} —
 
-  1. Open  brave://extensions
+  1. Open the extensions page (for example  brave://extensions  or  chrome://extensions )
   2. Turn on  Developer mode
   3. Choose  Load unpacked  and select:
      $meetme_extension_dir
 
-The native helper is already registered for this extension, so nothing else is needed.
+The helper is already registered, so the extension works the moment it loads. The
+extension's ID is fixed by its manifest, so if you ever remove and re-add it, it keeps
+the same ID and you do not need to run this installer again.
 EOF
-  if [ "$meetme_open" = 1 ] && [ -d "/Applications/Brave Browser.app" ]; then
-    open -a "Brave Browser" "brave://extensions" >/dev/null 2>&1 || true
+  if [ "$meetme_open" = 1 ]; then
+    case "${meetme_missing_in[0]}" in
+      Brave) open -a "Brave Browser" "brave://extensions" >/dev/null 2>&1 || true ;;
+      Chrome) open -a "Google Chrome" "chrome://extensions" >/dev/null 2>&1 || true ;;
+    esac
   fi
 fi
-say "Then open MeetMe's Settings to choose a recordings folder and a transcription engine."
+echo
+say "Finally, open MeetMe's Settings to choose a recordings folder and a transcription engine."

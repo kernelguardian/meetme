@@ -41,11 +41,12 @@ enum AppleTranscribe {
         return await AssetInventory.status(forModules: [SpeechTranscriber(locale: locale, preset: .transcription)]) == .installed
     }
 
-    static func run(audio: URL, model: String) async throws -> [TranscriptSegment] {
+    static func run(audio: URL, model: String, duration: Double = 0, progress: (@Sendable (Double) -> Void)? = nil) async throws -> [TranscriptSegment] {
         try await download(model: model)
         let locale = try await locale(for: model)
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         let analyzer = SpeechAnalyzer(modules: [transcriber])
+        let throttle = ProgressThrottle()
         let collector = Task<[TranscriptSegment], Error> {
             var segments: [TranscriptSegment] = []
             for try await result in transcriber.results {
@@ -55,6 +56,11 @@ enum AppleTranscribe {
                 let end = CMTimeRangeGetEnd(result.range).seconds
                 if !text.isEmpty, start.isFinite, end.isFinite, end >= start {
                     segments.append(TranscriptSegment(start: max(0, start), end: end, text: text))
+                }
+                // How far into the recording the recognizer has reached.
+                if duration > 0, end.isFinite {
+                    let fraction = min(1, max(0, end / duration))
+                    if throttle.shouldReport(fraction) { progress?(fraction) }
                 }
             }
             return segments

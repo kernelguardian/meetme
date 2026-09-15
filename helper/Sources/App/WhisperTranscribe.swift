@@ -79,7 +79,12 @@ enum WhisperTranscribe {
 
     /// `task: .translate` makes Whisper emit English for any source language, which is
     /// how recordings in languages Apple Intelligence cannot summarise still get a summary.
-    static func run(audio: URL, variant: String, language: String, translate: Bool, modelRoot: URL) async throws -> Outcome {
+    /// Whisper decodes in fixed 30-second windows, so the number of completed windows
+    /// says how far into the recording it has reached.
+    static let windowSeconds = 30.0
+
+    static func run(audio: URL, variant: String, language: String, translate: Bool, modelRoot: URL,
+                    duration: Double = 0, progress: (@Sendable (Double) -> Void)? = nil) async throws -> Outcome {
         try Task.checkCancellation()
         guard FileManager.default.fileExists(atPath: audio.path) else {
             throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: audio.path])
@@ -96,9 +101,17 @@ enum WhisperTranscribe {
             language: auto ? nil : language,
             detectLanguage: auto
         )
+        let throttle = ProgressThrottle()
+        let callback: TranscriptionCallback = { update in
+            guard duration > 0 else { return nil }
+            let reached = Double(update.windowId) * windowSeconds
+            let fraction = min(1, max(0, reached / duration))
+            if throttle.shouldReport(fraction) { progress?(fraction) }
+            return nil
+        }
         let results: [TranscriptionResult]
         do {
-            results = try await whisper.transcribe(audioPath: audio.path, audioInputOptions: input, decodeOptions: options)
+            results = try await whisper.transcribe(audioPath: audio.path, audioInputOptions: input, decodeOptions: options, callback: callback)
             try Task.checkCancellation()
             await whisper.unloadModels()
         } catch {

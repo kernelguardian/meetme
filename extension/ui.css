@@ -600,6 +600,17 @@ input::placeholder { color: var(--dim); }
   overflow: hidden;
 }
 
+.language-fix {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.language-fix-label { flex: none; color: var(--muted); font-size: 12px; }
+.language-fix select { max-width: 260px; }
+#language-hint { margin: 8px 0 0; }
+
 #more-recordings { margin-top: 12px; }
 .more-btn { margin-top: 12px; width: 100%; }
 
