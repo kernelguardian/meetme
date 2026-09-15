@@ -21,7 +21,7 @@ function populateLanguages(languages, selected) {
     menu.disabled = true;
     $('#save-language').disabled = true;
     $('#download-language').disabled = true;
-    $('#language-status').textContent = 'Apple native transcription is not available on this Mac.';
+    stat('#language-status', 'On-device transcription is not available on this Mac.', 'bad');
     return false;
   }
   const languageId = choices.some(language => language.id === selected) ? selected : choices[0].id;
@@ -32,10 +32,17 @@ function populateLanguages(languages, selected) {
   $('#download-language').disabled = false;
   return true;
 }
+function stat(selector, text, level = '') {
+  const node = $(selector);
+  node.textContent = text;
+  node.className = level ? `stat-row stat-${level}` : 'stat-row';
+}
 function languageMessage(state) {
-  if (state.downloadError) return `Language asset download failed: ${state.downloadError}`;
-  if (state.downloading) return `Downloading language assets for ${languageLabel(configuredLanguage)}…`;
-  return state.modelReady ? `Language assets for ${languageLabel(configuredLanguage)} are downloaded.` : `Language assets for ${languageLabel(configuredLanguage)} will download automatically when processing starts. You can also download them now.`;
+  if (state.downloadError) return [`Language asset download failed: ${state.downloadError}`, 'bad'];
+  if (state.downloading) return [`Downloading language assets for ${languageLabel(configuredLanguage)}…`, 'busy'];
+  return state.modelReady
+    ? [`Language assets for ${languageLabel(configuredLanguage)} are downloaded.`, 'ok']
+    : [`Language assets for ${languageLabel(configuredLanguage)} will download automatically when processing starts. You can also download them now.`, 'warn'];
 }
 async function loadDevices() {
   const devices = await navigator.mediaDevices.enumerateDevices();
@@ -45,11 +52,12 @@ async function refreshStatus() {
   if (choosingFolder) return;
   try {
     const state = await native('status');
-    $('#language-status').textContent = languageMessage(state);
+    stat('#language-status', ...languageMessage(state));
     $('#download-language').disabled = !!state.downloading || !!state.processing || !!state.recordingId || $('#language').disabled;
-    $('#summary-status').textContent = state.summaryAvailable === 'available' ? 'On-device summaries are available.' : `On-device summaries unavailable: ${state.summaryAvailable || 'unknown reason'}`;
+    if (state.summaryAvailable === 'available') stat('#summary-status', 'On-device summaries are available.', 'ok');
+    else stat('#summary-status', `On-device summaries unavailable: ${state.summaryAvailable || 'unknown reason'}`, 'warn');
   } catch (error) {
-    $('#language-status').textContent = `Helper unavailable: ${error.message}`;
+    stat('#language-status', `Helper unavailable: ${error.message}`, 'bad');
     $('#download-language').disabled = true;
   }
 }
@@ -71,27 +79,28 @@ $('#grant').onclick = () => run($('#grant'), async () => {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   stream.getTracks().forEach(track => track.stop());
   await loadDevices();
-  $('#mic-status').textContent = 'Microphone access granted.';
-}, error => { $('#mic-status').textContent = `Microphone unavailable: ${error.message}`; });
+  stat('#mic-status', 'Microphone access granted.', 'ok');
+}, error => { stat('#mic-status', `Microphone unavailable: ${error.message}`, 'bad'); });
 $('#save-language').onclick = () => run($('#save-language'), async () => {
   const result = await native('settings', { model: $('#language').value });
   configuredLanguage = result.model;
   if (Array.isArray(result.languages)) populateLanguages(result.languages, configuredLanguage);
-  $('#language-status').textContent = `Saved ${languageLabel(configuredLanguage)}.`;
+  stat('#language-status', `Saved ${languageLabel(configuredLanguage)}.`, 'ok');
   await refreshStatus();
-}, error => { $('#language-status').textContent = `Could not save language: ${error.message}`; });
+}, error => { stat('#language-status', `Could not save language: ${error.message}`, 'bad'); });
 $('#device').onchange = async () => {
   try { await chrome.storage.local.set({ microphoneDeviceId: $('#device').value }); }
-  catch (error) { $('#mic-status').textContent = `Could not save microphone: ${error.message}`; }
+  catch (error) { stat('#mic-status', `Could not save microphone: ${error.message}`, 'bad'); }
 };
 $('#download-language').onclick = async () => {
   $('#download-language').disabled = true;
   try {
     const result = await native('downloadModel');
-    $('#language-status').textContent = result.queued ? `Downloading language assets for ${languageLabel(configuredLanguage)}…` : 'Language asset download unavailable.';
+    if (result.queued) stat('#language-status', `Downloading language assets for ${languageLabel(configuredLanguage)}…`, 'busy');
+    else stat('#language-status', 'Language asset download unavailable.', 'warn');
     await refreshStatus();
   } catch (error) {
-    $('#language-status').textContent = `Could not download language assets: ${error.message}`;
+    stat('#language-status', `Could not download language assets: ${error.message}`, 'bad');
     $('#download-language').disabled = false;
   }
 };
@@ -102,13 +111,13 @@ $('#download-language').onclick = async () => {
     $('#library').textContent = settings.libraryPath || hello.libraryPath || 'No folder selected';
     if (!populateLanguages(settings.languages, settings.model || hello.model || 'en-US')) return;
     try { await loadDevices(); }
-    catch (error) { $('#mic-status').textContent = `Microphone list unavailable: ${error.message}`; }
+    catch (error) { stat('#mic-status', `Microphone list unavailable: ${error.message}`, 'bad'); }
     $('#device').value = local.microphoneDeviceId || '';
     await refreshStatus();
     polling = setInterval(refreshStatus, 3_000);
   } catch (error) {
     $('#library').textContent = `Helper unavailable: ${error.message}`;
-    $('#language-status').textContent = 'Transcription settings cannot be loaded.';
+    stat('#language-status', 'Transcription settings cannot be loaded.', 'bad');
     $('#download-language').disabled = true;
   }
 })();

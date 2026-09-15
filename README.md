@@ -103,6 +103,15 @@ and acceptance gates.
 The helper supports `MEETME_CONFIG_DIR` and `MEETME_LIBRARY_DIR` environment overrides for
 isolated development. Do not point tests at your personal recording library.
 
+The toolbar and app icons in `extension/icons/` are committed, and regenerated only when the
+mark itself changes:
+
+```sh
+python3 tools/make-icons.py
+```
+
+It needs Pillow and writes both the idle and recording variants.
+
 ## Troubleshooting
 
 - **Native host not found:** run the installer with the ID currently displayed in

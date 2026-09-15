@@ -1,1 +1,116 @@
-#meetme-hint,#meetme-recording-indicator{position:fixed;right:16px;z-index:2147483647;max-width:310px;padding:11px 14px;border-radius:10px;background:#182236;color:#fff;border:1px solid #526b97;font:13px system-ui,sans-serif;box-shadow:0 5px 24px #0007}#meetme-hint{bottom:16px}#meetme-hint button{float:right;margin-left:10px;border:0;background:transparent;color:#b8d2ff;font-size:18px;cursor:pointer}#meetme-hint strong,#meetme-hint span,#meetme-recording-indicator strong,#meetme-recording-indicator span{display:block}#meetme-recording-indicator{top:16px;background:#40191e;border-color:#dd5966}.meetme-recording-detail{margin-top:3px}
+/* Injected into meeting pages. Values are hardcoded — ui.css tokens do not reach
+   this document — and selectors stay id-scoped to survive host page styles. */
+
+#meetme-hint,
+#meetme-recording-indicator {
+  position: fixed;
+  right: 16px;
+  z-index: 2147483647;
+  box-sizing: border-box;
+  max-width: 340px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: #16181d;
+  color: #e8eaed;
+  border: 1px solid #323641;
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  box-shadow: 0 1px 2px #0000006b, 0 10px 30px #00000066;
+}
+
+#meetme-hint *,
+#meetme-recording-indicator * { box-sizing: border-box; }
+
+#meetme-hint { bottom: 16px; }
+
+#meetme-hint strong,
+#meetme-hint span { display: block; }
+
+#meetme-hint strong { font-weight: 600; margin-bottom: 3px; }
+#meetme-hint span { color: #9aa0ac; font-size: 12px; }
+
+#meetme-hint button {
+  float: right;
+  margin-left: 10px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: #9aa0ac;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#meetme-hint button:hover { color: #e8eaed; }
+
+#meetme-recording-indicator {
+  top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Wide enough to keep the detail line from wrapping. */
+  max-width: 400px;
+  padding: 10px 10px 10px 14px;
+  background: #1b1418;
+  border-color: #6d2b31;
+}
+
+#meetme-recording-indicator::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: #e5484d;
+  animation: meetme-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes meetme-pulse { 50% { opacity: 0.25; } }
+
+@media (prefers-reduced-motion: reduce) {
+  #meetme-recording-indicator::before { animation: none; }
+}
+
+#meetme-recording-indicator .meetme-recording-text { min-width: 0; }
+
+#meetme-recording-indicator strong {
+  display: block;
+  font-weight: 600;
+  font-size: 13px;
+  color: #e8eaed;
+}
+
+#meetme-recording-indicator .meetme-recording-detail {
+  display: block;
+  margin-top: 2px;
+  color: #9aa0ac;
+  font-size: 12px;
+}
+
+#meetme-recording-indicator .meetme-recording-stop {
+  flex: none;
+  margin: 0;
+  padding: 6px 11px;
+  border: 0;
+  border-radius: 6px;
+  background: #e5484d;
+  color: #fff;
+  font: 600 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  cursor: pointer;
+}
+
+#meetme-recording-indicator .meetme-recording-stop:hover:not(:disabled) { background: #f05a5f; }
+#meetme-recording-indicator .meetme-recording-stop:disabled { opacity: 0.5; cursor: default; }
+
+#meetme-recording-indicator .meetme-recording-dismiss {
+  flex: none;
+  margin: 0;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: #6c7280;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#meetme-recording-indicator .meetme-recording-dismiss:hover { color: #e8eaed; }

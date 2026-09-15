@@ -1,1 +1,75 @@
-<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../ui.css"><title>MeetMe library</title></head><body><main><h1>Meeting library</h1><div class="toolbar"><input id="query" type="search" placeholder="Search titles and transcripts"><button id="refresh">Refresh</button></div><p id="notice" class="meta" role="status"></p><section id="list"></section><button id="more-recordings" class="hidden">Load more recordings</button><section id="detail" class="hidden"><button id="back">← Library</button><div id="recording"></div><video id="video" controls preload="metadata" style="width:100%;max-height:65vh"></video><div class="toolbar"><button id="retry-all">Reprocess all</button><button id="retry-transcript">Reprocess transcript</button><button id="retry-summary">Recreate summary</button><button id="recover">Recover recording</button><button id="cleanup">Clean recovery files</button></div><section class="card"><h2>Summary</h2><div id="summary" class="summary">No summary yet.</div></section><section class="card"><h2>Transcript</h2><div id="segments" class="segments"></div><button id="more">Load more transcript</button></section></section></main><script type="module" src="app.js"></script></body></html>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="../ui.css">
+  <title>MeetMe library</title>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">
+      <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="9" y="3" width="6" height="10.5" rx="3" fill="currentColor"></rect>
+        <path d="M6 11.5a6 6 0 0 0 12 0M12 17.5V21M9 21h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+      </svg>
+      MeetMe
+    </span>
+    <div class="search">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="4.5" stroke="#6c7280" stroke-width="1.6"></circle>
+        <path d="M10.6 10.6L14 14" stroke="#6c7280" stroke-width="1.6" stroke-linecap="round"></path>
+      </svg>
+      <input id="query" type="search" placeholder="Search titles and transcripts" aria-label="Search titles and transcripts">
+    </div>
+    <button id="refresh" class="btn btn-icon" title="Refresh" aria-label="Refresh">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+        <path d="M13.5 2v3.2h-3.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </button>
+  </header>
+
+  <main>
+    <p id="notice" class="meta" role="status"></p>
+    <section id="list"></section>
+    <button id="more-recordings" class="btn hidden">Load more recordings</button>
+
+    <section id="detail" class="hidden">
+      <div class="detail-head">
+        <button id="back" class="btn btn-ghost">← Library</button>
+        <div id="recording"></div>
+      </div>
+
+      <div class="detail-grid">
+        <div class="detail-main">
+          <video id="video" controls preload="metadata"></video>
+
+          <div class="btn-row detail-actions">
+            <button id="retry-all" class="btn">Reprocess all</button>
+            <button id="retry-transcript" class="btn">Reprocess transcript</button>
+            <button id="retry-summary" class="btn">Recreate summary</button>
+            <button id="recover" class="btn">Recover recording</button>
+            <button id="cleanup" class="btn">Clean recovery files</button>
+          </div>
+
+          <section class="panel">
+            <div class="panel-head"><h2>Summary</h2></div>
+            <div class="panel-body">
+              <div id="summary" class="summary">No summary yet.</div>
+            </div>
+          </section>
+        </div>
+
+        <section class="panel panel-transcript">
+          <div class="panel-head"><h2>Transcript</h2></div>
+          <div class="panel-body">
+            <div id="segments" class="segments"></div>
+            <button id="more" class="btn more-btn">Load more transcript</button>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

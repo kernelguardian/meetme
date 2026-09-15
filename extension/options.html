@@ -1,1 +1,62 @@
-<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="ui.css"><title>MeetMe settings</title></head><body><main><h1>MeetMe settings</h1><section class="card"><h2>Local library</h2><p id="library">Loading…</p><button id="folder">Choose folder</button></section><section class="card"><h2>Microphone</h2><p>MeetMe records your microphone independently from the meeting app’s mute button.</p><select id="device"><option value="">Default microphone</option></select><button id="grant">Allow microphone</button><p id="mic-status" class="meta" role="status"></p></section><section class="card"><h2>Apple native transcription</h2><p>Choose the language spoken in the meeting. MeetMe processes it on this Mac and downloads missing language assets automatically when processing starts.</p><select id="language" disabled><option>Loading languages…</option></select><button id="save-language" disabled>Save language</button><button id="download-language" disabled>Download language assets</button><p id="language-status" class="meta" role="status"></p><p id="summary-status" class="meta"></p></section><section class="card"><h2>Recording reminder</h2><p>Obtain any required participant consent before recording. Join reminders are advisory and never start a recording.</p></section></main><script type="module" src="options.js"></script></body></html>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="ui.css">
+  <title>MeetMe settings</title>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <span class="brand">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="9" y="3" width="6" height="10.5" rx="3" fill="currentColor"></rect>
+          <path d="M6 11.5a6 6 0 0 0 12 0M12 17.5V21M9 21h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+        </svg>
+      </span>
+      <h1>Settings</h1>
+    </header>
+
+    <section class="card">
+      <div class="card-head"><h2>Local library</h2></div>
+      <p class="small">Recordings, transcripts and summaries are written here. Nothing leaves this Mac.</p>
+      <p id="library" class="path-chip">Loading…</p>
+      <div class="card-controls">
+        <button id="folder" class="btn">Choose folder</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Microphone</h2></div>
+      <p class="small">MeetMe records your microphone independently from the meeting app’s mute button.</p>
+      <div class="card-controls">
+        <select id="device" class="grow">
+          <option value="">Default microphone</option>
+        </select>
+        <button id="grant" class="btn">Allow microphone</button>
+      </div>
+      <p id="mic-status" class="stat-row" role="status"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Transcription</h2></div>
+      <p class="small">Choose the language spoken in the meeting. MeetMe transcribes it on this Mac using Apple’s on-device speech models, and downloads missing language assets automatically when processing starts.</p>
+      <div class="card-controls">
+        <select id="language" class="grow" disabled>
+          <option>Loading languages…</option>
+        </select>
+        <button id="save-language" class="btn" disabled>Save</button>
+        <button id="download-language" class="btn" disabled>Download assets</button>
+      </div>
+      <p id="language-status" class="stat-row" role="status"></p>
+      <p id="summary-status" class="stat-row"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Before you record</h2></div>
+      <p class="small">Obtain any required participant consent before recording. The in-meeting reminder is advisory and never starts a recording on its own.</p>
+    </section>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

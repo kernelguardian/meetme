@@ -28,7 +28,7 @@ function harness({ offscreenFailure = false } = {}) {
     },
     storage: { session: { get: async () => ({}), set: async () => {} }, local: { get: async () => ({}) } },
     tabs: { query: async () => [{ id: 10 }], get: async id => ({ id, title: 'Test', url: 'https://meet.google.com/test' }), sendMessage: async () => {}, onRemoved: event() },
-    action: { setBadgeText() {}, setBadgeBackgroundColor() {} },
+    action: { setBadgeText() {}, setBadgeBackgroundColor() {}, setIcon: () => Promise.resolve() },
     offscreen: { createDocument: async () => { if (offscreenFailure) throw new Error('Offscreen creation failed'); } },
     tabCapture: { getMediaStreamId: async () => 'stream-id' },
   };

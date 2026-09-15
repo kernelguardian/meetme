@@ -41,6 +41,8 @@ function broadcastState(previousTabId) {
   const active = state.phase === 'recording' || state.phase === 'stopping';
   chrome.action.setBadgeText({ text: active ? 'REC' : '' });
   if (active) chrome.action.setBadgeBackgroundColor({ color: state.micEnabled ? '#c62828' : '#6b7280' });
+  const variant = active ? 'icon-rec' : 'icon';
+  chrome.action.setIcon({ path: { 16: `icons/${variant}-16.png`, 32: `icons/${variant}-32.png`, 48: `icons/${variant}-48.png` } }).catch(() => {});
   // Broadcasts intentionally have no responder.  Without a target, a service worker
   // can answer its own message before the intended extension document sees it.
   chrome.runtime.sendMessage({ target: 'ui', type: 'capture-state', state }).catch(() => {});
@@ -147,7 +149,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // response from the service worker.
   if (message?.target && message.target !== 'background') return false;
   const extensionSender = sender.id === chrome.runtime.id && sender.url?.startsWith(chrome.runtime.getURL(''));
-  if (!extensionSender && !['meeting-hint', 'get-capture-state'].includes(message?.type)) {
+  if (!extensionSender && !['meeting-hint', 'get-capture-state', 'stop-capture'].includes(message?.type)) {
     sendResponse({ ok: false, error: 'This action is only available in MeetMe extension pages.' });
     return false;
   }
@@ -163,7 +165,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return state;
     }
     if (message.type === 'start-capture') { await startCapture(message.tabId ?? sender.tab?.id, message.micEnabled); return state; }
-    if (message.type === 'stop-capture') { await stopCapture(); return state; }
+    if (message.type === 'stop-capture') {
+      // The in-page indicator may stop its own tab; no other content script may.
+      if (!extensionSender && state.recording?.tabId !== sender.tab?.id) throw new Error('Only the recording tab can stop its own capture.');
+      await stopCapture();
+      return state;
+    }
     if (message.type === 'toggle-mic') {
       if (state.phase !== 'recording') throw new Error('Microphone controls are available only while recording.');
       const reply = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'offscreen-mic', enabled: !!message.enabled });

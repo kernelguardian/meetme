@@ -7,7 +7,12 @@
   "permissions": ["activeTab", "tabCapture", "offscreen", "storage", "nativeMessaging", "tabs"],
   "host_permissions": ["http://127.0.0.1:*/*", "https://meet.google.com/*", "https://teams.microsoft.com/*", "https://*.teams.microsoft.com/*", "https://app.zoom.us/*", "https://*.zoom.us/*"],
   "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_title": "MeetMe", "default_popup": "popup.html" },
+  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
+  "action": {
+    "default_title": "MeetMe",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png" }
+  },
   "options_page": "options.html",
   "web_accessible_resources": [{ "resources": ["content/hint.css"], "matches": ["https://meet.google.com/*", "https://teams.microsoft.com/*", "https://*.teams.microsoft.com/*", "https://app.zoom.us/*", "https://*.zoom.us/*"] }],
   "content_scripts": [
