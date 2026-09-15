@@ -57,6 +57,7 @@ function statusPill(recording) {
     return [STAGE_LABEL[jobStage] || 'Processing…', 'pill-busy'];
   }
   if (jobStatus === 'queued') return ['Queued', 'pill-busy'];
+  if (jobStatus === 'stopped') return ['Stopped', 'pill-warn'];
   if (jobStatus === 'failed' || status === 'failed') return ['Failed', 'pill-bad'];
   if (status === 'incomplete') return ['Incomplete', 'pill-warn'];
   if (status === 'finalizing') return ['Finalizing…', 'pill-busy'];
@@ -301,6 +302,8 @@ async function populateDetailLanguage(recording) {
 function setActionAvailability(recording) {
   const ready = recording?.status === 'ready';
   const busy = ['queued', 'running'].includes(recording?.jobStatus);
+  $('#stop-processing').disabled = !busy;
+  $('#stop-processing').hidden = !busy;
   $('#retry-all').disabled = !ready || busy;
   $('#retry-transcript').disabled = !ready || busy;
   $('#retry-summary').disabled = !ready || busy || !recording?.hasTranscript;
@@ -364,7 +367,9 @@ async function action(command, params = {}) {
     await loadDetail(true);
     if (command === 'recover') await playbackURL();
     if (command === 'reprocess') wasProcessing = true;
-    notice(command === 'reprocess' ? 'Processing request queued.' : 'Request completed.');
+    notice(command === 'reprocess' ? 'Processing request queued.'
+      : command === 'stopProcessing' ? 'Processing stopped. Anything already written was kept.'
+      : 'Request completed.');
     completed = true;
   } catch (error) {
     notice(error.message);
@@ -442,6 +447,7 @@ $('#back').onclick = () => {
   list(true);
 };
 $('#more').onclick = () => loadDetail().catch(error => notice(error.message));
+$('#stop-processing').onclick = () => action('stopProcessing');
 // A wrong language invalidates the summary too, so this always re-runs both stages.
 $('#retranscribe').onclick = () => action('reprocess', { stage: 'all', language: $('#detail-language').value });
 $('#retry-all').onclick = () => action('reprocess', { stage: 'all' });

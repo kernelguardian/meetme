@@ -32,7 +32,17 @@ actor Jobs {
                 do { try await Self.process(rec,library:library) { stage, fraction in
                         Task { await jobs?.setJobProgress(id:id,stage:stage,fraction:fraction) }
                     } }
-                catch is CancellationError { _ = try? library.update(rec.id) { $0.jobStatus = "queued"; $0.error = "Processing interrupted; will resume after recording." }; await jobs?.clearJobProgress(id:id); break }
+                catch is CancellationError {
+                    // A recording starting or a folder change re-queues the job; an
+                    // explicit Stop leaves it alone until the user asks again.
+                    if await jobs?.consumeStopRequest(id) == true {
+                        _ = try? library.update(id) { $0.jobStatus = "stopped"; $0.error = nil }
+                    } else {
+                        _ = try? library.update(id) { $0.jobStatus = "queued"; $0.error = "Processing interrupted; will resume after recording." }
+                    }
+                    await jobs?.clearJobProgress(id:id)
+                    break
+                }
                 catch { _ = try? library.update(rec.id) { $0.jobStatus = "failed"; $0.error = error.localizedDescription } }
                 await jobs?.clearJobProgress(id:id)
             }
@@ -40,8 +50,28 @@ actor Jobs {
         }
     }
     private var jobProgress: (id: String, stage: String, fraction: Double)? = nil
+    private var stopRequests: Set<String> = []
     private func setJobProgress(id: String, stage: String, fraction: Double) { jobProgress = (id, stage, fraction) }
     private func clearJobProgress(id: String) { if jobProgress?.id == id { jobProgress = nil } }
+    private func consumeStopRequest(_ id: String) -> Bool { stopRequests.remove(id) != nil }
+
+    /// Stops transcription or summarisation for one recording. Anything already written
+    /// is kept, and other queued recordings carry on.
+    func stopJob(id: String) async throws -> [String:Any] {
+        let rec = try library.get(id)
+        guard ["queued","running"].contains(rec.jobStatus) else { return ["stopped":false,"jobStatus":rec.jobStatus] }
+        if rec.jobStatus == "queued" {
+            // Never started, so it is enough to take it out of the queue.
+            _ = try library.update(id) { $0.jobStatus = "stopped"; $0.error = nil }
+            return ["stopped":true,"jobStatus":"stopped"]
+        }
+        stopRequests.insert(id)
+        worker?.cancel()
+        await worker?.value
+        clearJobProgress(id: id)
+        start()
+        return ["stopped":true,"jobStatus":(try? library.get(id).jobStatus) ?? "stopped"]
+    }
     private func finished() { worker = nil; if !suspended && library.all().contains(where: { $0.status == "ready" && $0.jobStatus == "queued" }) { start() } }
     func enqueue(id: String,stage: String,language: String? = nil) async throws -> Recording {
         guard ["all","transcribe","summary"].contains(stage) else { throw MeetMeError("Unknown processing stage") }

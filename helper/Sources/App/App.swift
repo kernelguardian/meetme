@@ -79,6 +79,7 @@ actor Coordinator {
         case "reprocess": return library.dictionary(try await jobs.enqueue(id:id(),stage:request["stage"] as? String ?? "all",language:request["language"] as? String))
         case "downloadModel": return try await jobs.download()
         case "cancelDownload": return await jobs.cancelDownload()
+        case "stopProcessing": return try await jobs.stopJob(id:id())
         case "cleanup": return library.dictionary(try store.cleanup(id:id()))
         default: throw MeetMeError("Unknown command: \(command)")
         }
