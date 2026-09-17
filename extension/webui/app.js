@@ -447,6 +447,31 @@ $('#back').onclick = () => {
   list(true);
 };
 $('#more').onclick = () => loadDetail().catch(error => notice(error.message));
+// The panel only holds the pages loaded so far, so copying walks every page.
+async function copyTranscript() {
+  if (!selected) return;
+  const button = $('#copy-transcript');
+  const recordingId = selected;
+  const lines = [];
+  button.disabled = true;
+  try {
+    for (let offset = 0, total = 1; offset < total;) {
+      const detail = await native('detail', { recordingId, offset, limit: SEGMENT_PAGE_SIZE });
+      const segments = detail.segments || [];
+      for (const segment of segments) lines.push(`[${stamp(segment.start ?? segment.startTime)}] ${segment.text || ''}`);
+      if (!segments.length) break;
+      offset += segments.length;
+      total = Number(detail.totalSegments || 0);
+    }
+    if (!lines.length) return notice('No transcript to copy yet.');
+    await navigator.clipboard.writeText(lines.join('\n'));
+    button.textContent = 'Copied';
+    setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+  } finally {
+    button.disabled = false;
+  }
+}
+$('#copy-transcript').onclick = () => copyTranscript().catch(error => notice(error.message));
 $('#stop-processing').onclick = () => action('stopProcessing');
 // A wrong language invalidates the summary too, so this always re-runs both stages.
 $('#retranscribe').onclick = () => action('reprocess', { stage: 'all', language: $('#detail-language').value });
