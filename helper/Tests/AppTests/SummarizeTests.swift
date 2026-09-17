@@ -59,4 +59,19 @@ final class SummarizeTests: XCTestCase {
         XCTAssertEqual(Summarize.timestamps(in: "[00:01:33-00:02:10]"), [93])
         XCTAssertTrue(Summarize.validProvenance(in: "A claim [00:01:33-00:02:10]", segments: segments))
     }
+
+    func testTruncatedSummaryIsRecognised() {
+        // An unclosed citation is a cut-off response whatever its length.
+        XCTAssertTrue(Summarize.looksTruncated("## Open questions\n\n1. What pain points do clients face? [00:09:10–"))
+        let long = String(repeating: "- A complete bullet. [00:00:05]\n", count: 80)
+        XCTAssertFalse(Summarize.looksTruncated(long))
+        XCTAssertTrue(Summarize.looksTruncated(long + "- A bullet that stops mid sen"))
+        // Short and unpunctuated is style, not truncation.
+        XCTAssertFalse(Summarize.looksTruncated("- None recorded"))
+    }
+
+    func testDroppingLastLineRemovesOrphanedHeading() {
+        let text = "## Decisions\n\n- Agreed. [00:00:05]\n\n## Open questions\n\n1. What pain [00:09:10–"
+        XCTAssertEqual(Summarize.droppingLastLine(text), "## Decisions\n\n- Agreed. [00:00:05]")
+    }
 }

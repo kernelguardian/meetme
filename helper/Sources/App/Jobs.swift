@@ -185,7 +185,7 @@ actor Jobs {
             if let skipped {
                 _ = try library.update(rec.id) { $0.summarySkipped = skipped }
             } else {
-                let summary = try await Summarize.run(segments:source,work:work) { fraction in progress?("summary", fraction) }
+                let summary = try await Summarize.run(segments:source,title:rec.title,work:work) { fraction in progress?("summary", fraction) }
                 try durableWrite(Data(summary.utf8),to:folder.appendingPathComponent("summary.md"))
                 _ = try library.update(rec.id) { $0.hasSummary = true }
             }
