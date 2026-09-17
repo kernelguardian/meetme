@@ -222,9 +222,12 @@ function inline(parent, text) {
   }
   if (last < text.length) parent.append(text.slice(last));
 }
+let summaryMarkdown = '';
 function renderSummary(markdown, recording = {}) {
   const box = $('#summary');
   box.replaceChildren();
+  summaryMarkdown = markdown?.trim() || '';
+  $('#copy-summary').disabled = !summaryMarkdown;
   if (!markdown?.trim()) {
     // A skipped summary is an expected outcome, not a failure, so say why.
     box.textContent = recording.summarySkipped || 'No summary yet.';
@@ -447,6 +450,12 @@ $('#back').onclick = () => {
   list(true);
 };
 $('#more').onclick = () => loadDetail().catch(error => notice(error.message));
+function flashCopied(button) {
+  button.textContent = 'Copied';
+  setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+}
+$('#copy-summary').onclick = () => navigator.clipboard.writeText(summaryMarkdown)
+  .then(() => flashCopied($('#copy-summary')), error => notice(error.message));
 // The panel only holds the pages loaded so far, so copying walks every page.
 async function copyTranscript() {
   if (!selected) return;
@@ -465,8 +474,7 @@ async function copyTranscript() {
     }
     if (!lines.length) return notice('No transcript to copy yet.');
     await navigator.clipboard.writeText(lines.join('\n'));
-    button.textContent = 'Copied';
-    setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+    flashCopied(button);
   } finally {
     button.disabled = false;
   }
