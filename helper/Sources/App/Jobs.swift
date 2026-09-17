@@ -155,11 +155,11 @@ actor Jobs {
             try Task.checkCancellation()
             let outcome = try await Transcribe.run(audio:audio,engine:engine,language:language,variant:variant,modelRoot:library.modelRoot,
                                                    duration:rec.duration ?? 0) { fraction in progress?("transcribe", fraction) }
-            segments = outcome.segments; spoken = outcome.language
+            segments = Speakers.assign(outcome.segments,intervals:Speakers.load(folder:folder)); spoken = outcome.language
             try Task.checkCancellation()
             try durableWrite(JSONEncoder().encode(segments),to:folder.appendingPathComponent("transcript.json"))
-            try durableWrite(Data(segments.map(\.text).joined(separator:"\n").utf8),to:folder.appendingPathComponent("transcript.txt"))
-            let srt = segments.enumerated().map { "\($0.offset+1)\n\(timestamp($0.element.start)) --> \(timestamp($0.element.end))\n\($0.element.text)\n" }.joined(separator:"\n")
+            try durableWrite(Data(segments.map(\.attributedText).joined(separator:"\n").utf8),to:folder.appendingPathComponent("transcript.txt"))
+            let srt = segments.enumerated().map { "\($0.offset+1)\n\(timestamp($0.element.start)) --> \(timestamp($0.element.end))\n\($0.element.attributedText)\n" }.joined(separator:"\n")
             try durableWrite(Data(srt.utf8),to:folder.appendingPathComponent("transcript.srt"))
             _ = try library.update(rec.id) { $0.hasTranscript = true; $0.language = spoken; $0.jobStage = rec.jobStage == "all" ? "summary" : "transcribe" }
         }
@@ -172,9 +172,10 @@ actor Jobs {
                     // Apple Intelligence cannot read this language, so summarise Whisper's
                     // English rendering of the same audio; timings still match the recording.
                     if !FileManager.default.fileExists(atPath:audio.path) { try MediaPrepare.audio(video:video,output:audio) }
-                    let english = try await Transcribe.translateToEnglish(audio:audio,engine:engine,language:spoken,variant:variant,modelRoot:library.modelRoot,
+                    let translated = try await Transcribe.translateToEnglish(audio:audio,engine:engine,language:spoken,variant:variant,modelRoot:library.modelRoot,
                                                                           duration:rec.duration ?? 0) { fraction in progress?("translate", fraction) }
-                    try durableWrite(Data(english.map(\.text).joined(separator:"\n").utf8),to:folder.appendingPathComponent("transcript.en.txt"))
+                    let english = Speakers.assign(translated,intervals:Speakers.load(folder:folder))
+                    try durableWrite(Data(english.map(\.attributedText).joined(separator:"\n").utf8),to:folder.appendingPathComponent("transcript.en.txt"))
                     source = english
                     _ = try library.update(rec.id) { $0.hasTranslation = true }
                 } else {

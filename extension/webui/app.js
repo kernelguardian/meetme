@@ -186,7 +186,16 @@ function appendSegments(segments) {
     time.className = 'seg-time';
     time.textContent = stamp(start);
     const text = document.createElement('span');
-    text.textContent = segment.text || '';
+    // The name is shown where the speaker changes, not on every line of one turn.
+    const speaker = segment.speaker || '';
+    row.dataset.speaker = speaker;
+    if (speaker && box.lastElementChild?.dataset.speaker !== speaker) {
+      const who = document.createElement('strong');
+      who.className = 'seg-speaker';
+      who.textContent = speaker;
+      text.append(who);
+    }
+    text.append(segment.text || '');
     row.append(time, text);
     row.onclick = () => seek(start);
     box.append(row);
@@ -338,7 +347,7 @@ async function loadDetail(reset = false) {
   if (recording.participants?.length) {
     const people = document.createElement('p');
     people.className = 'meta';
-    people.textContent = `Visible participant labels at start: ${recording.participants.join(', ')}. These do not identify transcript speakers.`;
+    people.textContent = `Visible participant labels at start: ${recording.participants.join(', ')}. Names in the transcript come from who the meeting page showed speaking.`;
     $('#recording').append(people);
   }
   renderSummary(detail.summary, recording);
@@ -467,7 +476,7 @@ async function copyTranscript() {
     for (let offset = 0, total = 1; offset < total;) {
       const detail = await native('detail', { recordingId, offset, limit: SEGMENT_PAGE_SIZE });
       const segments = detail.segments || [];
-      for (const segment of segments) lines.push(`[${stamp(segment.start ?? segment.startTime)}] ${segment.text || ''}`);
+      for (const segment of segments) lines.push(`[${stamp(segment.start ?? segment.startTime)}] ${segment.speaker ? `${segment.speaker}: ` : ''}${segment.text || ''}`);
       if (!segments.length) break;
       offset += segments.length;
       total = Number(detail.totalSegments || 0);

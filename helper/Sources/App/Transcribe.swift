@@ -4,6 +4,11 @@ struct TranscriptSegment: Codable, Sendable {
     var start: Double
     var end: Double
     var text: String
+    /// Who the meeting page showed speaking here; absent when nothing was logged.
+    var speaker: String? = nil
+
+    /// The text as written to exports and shown to the summariser.
+    var attributedText: String { speaker.map { "\($0): \(text)" } ?? text }
 }
 
 /// Fronts the two transcription engines. Apple's is the default because it needs no

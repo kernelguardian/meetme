@@ -737,6 +737,8 @@ input::placeholder { color: var(--dim); }
   flex: none;
 }
 
+.seg-speaker { display: block; font-size: 12px; font-weight: 600; color: var(--accent); }
+
 .seg:hover .seg-time { color: var(--accent); }
 
 .seg.is-active { background: var(--accent-soft); }

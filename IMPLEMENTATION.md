@@ -72,7 +72,7 @@ Apple's SpeechAnalyzer (30 locales, no download) and WhisperKit via argmax-oss-s
   executable tests above ran successfully here.
 - Platform hints and visible participant-label extraction are advisory and need validation
   against current meeting UIs. Names may be absent when no supported DOM labels are visible.
-  Speaker identification is not implemented; transcripts do not assign speakers.
+  On Google Meet, the content script logs who the page shows as speaking (class-name activity under each `data-participant-id` element) and the helper labels transcript segments from that log (`speakers.jsonl`). This is the page's indicator, not voice recognition; Teams and Zoom are not covered.
 - Personal installation is ad-hoc signed, not notarized or submitted to an extension store.
   The native helper was subsequently registered for the user's installed MeetMe extension
   during first-run troubleshooting.

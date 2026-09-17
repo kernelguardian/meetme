@@ -117,7 +117,8 @@ async function start({ recordingId, streamId, micEnabled, microphoneDeviceId }) 
     recorder.onerror = event => { void fail(event.error || new Error('Media recorder error')); };
     recorder.onstop = () => { if (session) { session.stopped = true; drain(); } };
     recorder.start(TIMESLICE_MS);
-    return { micEnabled: !!micStream, warning };
+    // Time zero of the recording, so the meeting page can log speakers on the same timeline.
+    return { micEnabled: !!micStream, warning, startedAt: Date.now() };
   } catch (error) {
     if (session?.tabStream === tabStream) session = undefined;
     for (const stream of [tabStream, micStream]) stream?.getTracks().forEach(track => track.stop());

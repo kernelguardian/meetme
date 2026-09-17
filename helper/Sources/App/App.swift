@@ -57,6 +57,11 @@ actor Coordinator {
                 let rec = try await Task.detached { try store.finalize(id:recordingId,expectedCount:count,expectedBytes:bytes) }.value
                 await jobs.resume(); return library.dictionary(rec)
             } catch { await jobs.resume(); throw error }
+        case "speakers":
+            // Logged by the content script while capturing, so only a live recording accepts them.
+            let recordingId = try id(), rec = try library.get(recordingId)
+            guard ["recording","finalizing"].contains(rec.status) else { throw MeetMeError("Speaker activity is only accepted while recording") }
+            return ["stored":try Speakers.append(Speakers.sanitize(request["intervals"]),folder:try library.folder(recordingId))]
         case "abort":
             let rec = try store.abort(id:id(),reason:request["error"] as? String ?? "Capture interrupted")
             await jobs.resume(); return library.dictionary(rec)

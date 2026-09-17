@@ -100,7 +100,9 @@ not on your shell's PATH. Run `./install/install.sh --help` for all options.
   A browser crash can lose uncommitted media; incomplete recordings are labelled accordingly.
 - Capture covers the rendered browser tab, not native desktop meeting apps. Participants
   hidden by the meeting's layout are not captured as separate video feeds.
-- Transcripts contain timestamps but do not automatically identify speakers by name.
+- On Google Meet, transcript lines are labelled with whoever Meet showed as speaking at that
+  moment. This follows Meet's on-screen indicator rather than recognising voices, so overlapping
+  speech goes to whoever spoke longest. Teams and Zoom transcripts have timestamps only.
 - Choose a non-synced local folder if you want to prevent separate cloud-sync software
   from uploading your recordings. Obtain any required participant consent before recording.
 

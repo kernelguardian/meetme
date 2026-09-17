@@ -115,7 +115,7 @@ async function startCapture(tabId, micEnabled) {
     const reply = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'offscreen-start', recordingId: recording.id, streamId, micEnabled: !!micEnabled, microphoneDeviceId });
     if (!reply?.ok) throw new Error(reply?.error || 'Offscreen capture could not start');
     if (state.recording?.id === recording.id) {
-      await setState({ phase: 'recording', micEnabled: !!reply.result?.micEnabled, error: reply.result?.warning || null });
+      await setState({ phase: 'recording', recording: { ...state.recording, startedAt: reply.result?.startedAt }, micEnabled: !!reply.result?.micEnabled, error: reply.result?.warning || null });
     }
   } catch (error) {
     if (recording) await native('abort', { recordingId: recording.id, error: error.message }).catch(() => {});
@@ -135,10 +135,21 @@ async function stopCapture() {
     await setState({ phase: 'idle', recording: null, micEnabled: false, error: error.message });
   }
 }
+// Finalizing queues transcription straight away, so whatever the meeting page has not
+// sent yet has to land first. The tab may already be gone; that only costs the tail.
+async function flushSpeakers(recordingId, tabId) {
+  if (!Number.isInteger(tabId)) return;
+  const reply = await Promise.race([
+    chrome.tabs.sendMessage(tabId, { type: 'speaker-flush' }).catch(() => null),
+    new Promise(resolve => setTimeout(resolve, 1500)),
+  ]);
+  if (Array.isArray(reply?.intervals) && reply.intervals.length) await native('speakers', { recordingId, intervals: reply.intervals }).catch(() => {});
+}
 async function finishCapture({ recordingId: finishedId, chunkCount, totalBytes, error }) {
   const recordingId = state.recording?.id;
   if (!recordingId || (finishedId && finishedId !== recordingId)) return;
   try {
+    if (!error) await flushSpeakers(recordingId, state.recording.tabId);
     if (error) await native('abort', { recordingId, error });
     else await native('finalize', { recordingId, chunkCount, totalBytes }, 90_000);
     await setState({ phase: 'idle', recording: null, micEnabled: false, error: error || null });
@@ -149,7 +160,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // response from the service worker.
   if (message?.target && message.target !== 'background') return false;
   const extensionSender = sender.id === chrome.runtime.id && sender.url?.startsWith(chrome.runtime.getURL(''));
-  if (!extensionSender && !['meeting-hint', 'get-capture-state', 'stop-capture'].includes(message?.type)) {
+  if (!extensionSender && !['meeting-hint', 'get-capture-state', 'stop-capture', 'speaker-intervals'].includes(message?.type)) {
     sendResponse({ ok: false, error: 'This action is only available in MeetMe extension pages.' });
     return false;
   }
@@ -170,6 +181,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!extensionSender && state.recording?.tabId !== sender.tab?.id) throw new Error('Only the recording tab can stop its own capture.');
       await stopCapture();
       return state;
+    }
+    if (message.type === 'speaker-intervals') {
+      // Only the tab being recorded may describe who is speaking in it.
+      if (!state.recording?.id || state.recording.tabId !== sender.tab?.id || !['recording', 'stopping'].includes(state.phase)) return { stored: 0 };
+      return native('speakers', { recordingId: state.recording.id, intervals: Array.isArray(message.intervals) ? message.intervals.slice(0, 500) : [] });
     }
     if (message.type === 'toggle-mic') {
       if (state.phase !== 'recording') throw new Error('Microphone controls are available only while recording.');
