@@ -189,6 +189,12 @@ cp "$meetme_source" "$meetme_temporary"
 chmod 700 "$meetme_temporary"
 codesign --force --sign - "$meetme_temporary"
 mv -f "$meetme_temporary" "$meetme_install_root/bin/MeetMeHelper"
+# The browser keeps its native-messaging host alive, so without this the previous
+# build goes on serving requests until the browser restarts. The extension launches
+# the new one on its next request.
+if pkill -f "$meetme_install_root/bin/MeetMeHelper" 2>/dev/null; then
+  say "Stopped the running helper so the new build takes over."
+fi
 # SwiftPM dependencies may bundle resources alongside the product; WhisperKit does.
 for meetme_bundle in "$meetme_repo/helper/.build/$meetme_configuration/"*.bundle; do
   [ -d "$meetme_bundle" ] || continue
@@ -259,7 +265,10 @@ if [ "${#meetme_loaded_in[@]}" -gt 0 ]; then
   say "Already loaded in: ${meetme_loaded_in[*]}. Reload it there to pick up this build."
 fi
 
-if [ "${#meetme_missing_in[@]}" -gt 0 ]; then
+# Only ask for the manual step when the extension is loaded nowhere. Someone who uses
+# it in Brave should not have Chrome opened at them on every reinstall just because
+# Chrome is also on the machine.
+if [ "${#meetme_loaded_in[@]}" -eq 0 ] && [ "${#meetme_missing_in[@]}" -gt 0 ]; then
   cat <<EOF
 
 One step is left, and only a person can do it: a browser will not let a script
